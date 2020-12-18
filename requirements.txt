@@ -1,0 +1,8 @@
+requests
+tabulate
+colorama>=0.3.8
+future
+h2o_wave==0.10.0
+h2o==3.32.0.2
+pandas
+matplotlib

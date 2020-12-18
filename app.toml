@@ -1,0 +1,11 @@
+[App]
+Name = "ai.h2o.h2o_aml"
+Version = "0.1.1"
+Title = "H2O AutoML"
+Description = "AutoML using H2O-3"
+Category = "Data Science"
+Keywords = ["h2o automl"]
+LongDescription = "about.md"
+
+[Runtime]
+Module = "src.app"
