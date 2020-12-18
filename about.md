@@ -13,7 +13,7 @@
 **Detailed Description:** This application allows the user to upload a csv file and then train a model using H2O-3 AutoML
 
 ### **Features**:
-* **Auto-ML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.
+* **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.
 * **Leaderboard**: Visualizing the AML leaderboard.
 * **Explainability**: Shows feature importance and row Shapley contributions.
 * **Deployment**: Select a model for MOJO download.
