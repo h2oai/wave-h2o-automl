@@ -1,1 +1,1 @@
-# wave-h2o-automl
+# Wave app for H2O AutoML
