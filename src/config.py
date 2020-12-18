@@ -29,7 +29,7 @@ class Configuration:
             ui.text("""
 This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI. 
 ### **Features**:
-* **Auto-ML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.<br>
+* **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.<br>
 * **Leaderboard**: Visualizing the AML leaderboard.<br>
 * **Explainability**: Shows feature importance and row Shapley contributions. <br>
 * **Deployment**: Select a model for MOJO download.<br>
