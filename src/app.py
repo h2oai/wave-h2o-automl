@@ -115,7 +115,7 @@ async def select_table(q: Q, warning: str = ''):
             ui.message_bar(type='warning', text=warning),
             ui.dropdown(name='train_file', label='Training data', value=q.app.train_file, required=True,
                         choices=choices),
-            ui.dropdown(name='test_file', label='Test data (optional)', value=q.app.test_file, required=False,
+            ui.dropdown(name='test_file', label='Test data (optional)', value=q.args.test_file, required=False,
                         choices=choices),
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
