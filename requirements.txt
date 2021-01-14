@@ -1,8 +1,4 @@
-requests
-tabulate
-colorama>=0.3.8
-future
 h2o_wave==0.10.0
-h2o==3.32.0.2
+driverlessai==1.9.0.4.post2
+https://s3.amazonaws.com/artifacts.h2o.ai/releases/ai/h2o/mlops/rel-0.40.0-rc1/6/mlops_client-0.40.0rc1%2Bbb1878b.rel0.40.0.rc1.6-py2.py3-none-any.whl
 pandas
-matplotlib

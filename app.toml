@@ -1,11 +1,17 @@
 [App]
-Name = "ai.h2o.h2o_aml"
-Version = "0.1.2"
-Title = "H2O AutoML"
-Description = "AutoML using H2O-3"
-Category = "Data Science"
-Keywords = ["h2o automl"]
-LongDescription = "about.md"
+Name = "mlops-test"
+Version = "0.0.1"
+Title = "mlops test"
+Description = "App that demonstrates MLOps integration"
+Category = "Other"
 
 [Runtime]
 Module = "src.app"
+MemoryLimit = "200Mi"
+MemoryReservation = "100Mi"
+EnableOIDC = true
+
+[[Env]]
+Name = "STORAGE_URL"
+Secret = "h2oai-mlops"
+SecretKey = "gateway"
