@@ -7,47 +7,80 @@ from .synthea_config import *
 from .synthea_utils import *
 pd.options.mode.chained_assignment = None
 
-test_mode = 1
+test_mode = 0
 
 # Global variables
 class GlobalVars:
+    # Track all patients processed
     patient_count = 0
+    # Track waiting patient count
+    wait_count = 0
+    # Dict of patient class
     all_patients = {}
     bed_capacity = 0
     bed_count = 0
+    min_beds = 0
+    forecasted_beds = 0
+    # List of time ticks
     time_list = []
+    # List of beds available over time
     bed_avail_list = []
+    # List of ages of patients, conditions and time stayed
     age_list = []
     condition_list = []
     time_stay_list = []
-
+    fail_time = None
 
 # Stores individual patient attributes
 class Patient:
     def __init__(self):
         GlobalVars.patient_count += 1
-        GlobalVars.bed_count -= 1
         self.id = GlobalVars.patient_count
         self.time_in = GlobalVars.time
         self.time_stay = np.random.randint(10, 30) # will be DAI prediction
-        self.time_out = self.time_in + self.time_stay
-        self.discharged = False
+        self.time_out = 0
+        self.status = ''
         self.age = np.random.randint(18, 70)
         self.condition = ''
-
-
-# Check if patient has been discharged and update patient attributes
-def process_patients():
-    for pat_id, patient in GlobalVars.all_patients.items():
-        if GlobalVars.time > patient.time_out:
-            patient.discharged = True
-            if GlobalVars.bed_count <= GlobalVars.bed_capacity:
-                GlobalVars.bed_count += 1
 
 
 async def show_charts(q: Q):
     del q.page['main'], q.page['menu'], q.page['notification']
     if len(GlobalVars.time_list) > 1:
+
+        q.page['app_logo'] = ui.markup_card(
+            box=app_config.plot01_box,
+            title='',
+            content="""<p style='text-align:center; vertical-align: top; display: table-cell; width: 134px;'>"""
+                    """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.app_icon_url + """' height='60px' width='60px'> </a> </p>"""
+
+        )
+
+        # Sim status
+        #q.page['plot01'] = ui.small_stat_card(box=app_config.plot02_box, title='Simulation Status',
+        #                                       value='Simulating')
+
+        pct = GlobalVars.time / q.app.simulation_time
+        if pct > 1:
+            pct = 1
+
+        q.page['plot01'] = ui.wide_gauge_stat_card(box=app_config.plot02_box, title='Simulation Status',
+                                                   value='Simulating', aux_value='', progress=pct, plot_color='$green')
+        # Pat count stats
+        q.page['plot02'] = ui.small_stat_card(box=app_config.plot03_box, title='Patient Count',
+                                              value=f'{GlobalVars.patient_count-1}')
+        # Pat wait count stats
+        q.page['plot03'] = ui.small_stat_card(box=app_config.plot04_box, title='Wait Count',
+                                              value=f'{GlobalVars.wait_count}')
+        # Bed capacity stats
+        q.page['plot04'] = ui.small_stat_card(box=app_config.plot05_box, title='Bed Capacity',
+                                              value=f'{GlobalVars.bed_capacity}')
+        # Forecast stats
+        q.page['plot05'] = ui.small_stat_card(box=app_config.plot06_box, title='Forecasted Beds',
+                                              value=f'{GlobalVars.forecasted_beds}')
+        # Fail time stats
+        q.page['plot06'] = ui.small_stat_card(box=app_config.plot07_box, title='Fail Time (days)',
+                                              value=f'{GlobalVars.fail_time}')
 
         # Line chart for available beds
         rows = [(GlobalVars.time_list[i], GlobalVars.bed_avail_list[i]) for i in range(len(GlobalVars.time_list))]
@@ -55,16 +88,17 @@ async def show_charts(q: Q):
                 box=app_config.plot1_box,
                 title='Hospital Bed Availability',
                 data=data('time beds', rows=rows),
-                plot=ui.plot([ui.mark(type='line', x='=time', y='=beds', x_min=0, y_min=0, y_max=GlobalVars.bed_capacity+50,
+                plot=ui.plot([ui.mark(type='line', x='=time', y='=beds', x_min=0, y_min=0-GlobalVars.bed_capacity, y_max=GlobalVars.bed_capacity+50,
                                       x_title='Time', y_title='Hospital Bed Availability', color='#33BBFF'),
-                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', color='#FF0000')]
+                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', color='$red'),
+                              ui.mark(y=0, label='Min Capacity', color='#FF0000')]
                              ))
 
         # Histogram of age
         unique, counts = np.unique(GlobalVars.age_list, return_counts=True)
         rows = list(zip(unique.tolist(), counts.tolist()))
-        q.page['plot22'] = ui.plot_card(
-                box=app_config.plot22_box,
+        q.page['plot21'] = ui.plot_card(
+                box=app_config.plot21_box,
                 title='Histogram of Age',
                 data=data('age count', rows=rows),
                 plot=ui.plot([ui.mark(type='interval', x='=age', y='=count', x_min=0, y_min=0,
@@ -74,8 +108,8 @@ async def show_charts(q: Q):
         # Histogram of conditions
         unique, counts = np.unique(GlobalVars.condition_list, return_counts=True)
         rows = list(zip(unique.tolist(), counts.tolist()))
-        q.page['plot23'] = ui.plot_card(
-                box=app_config.plot23_box,
+        q.page['plot22'] = ui.plot_card(
+                box=app_config.plot22_box,
                 title='Histogram of Conditions',
                 data=data('condition count', rows=rows),
                 plot=ui.plot([ui.mark(type='interval', x='=condition', y='=count', x_min=0, y_min=0,
@@ -93,19 +127,69 @@ async def show_charts(q: Q):
         q.app.c.data.quux = (GlobalVars.time_stay_list[-1] - GlobalVars.time_stay_list[-2])/ 100
         q.app.c.plot_data[-1] = [int(np.average(GlobalVars.time_stay_list))]
 
-        # Pat count chart
-        q.page['plot21'] = ui.small_stat_card(box=app_config.plot21_box, title='Patient Count',
-                                               value=f'{GlobalVars.patient_count-1}')
         await q.page.save()
     else:
-        q.page['plot1'] = ui.form_card(box=app_config.plot1_box, items=[ui.progress('Generating plots')])
+        q.page['plot1'] = ui.form_card(box=app_config.main_box, items=[ui.progress('Generating plots')])
         await q.page.save()
+
+
+# Check if patient has been discharged and update patient attributes
+def update_patients():
+    # Track min bed count
+    if GlobalVars.bed_count <= GlobalVars.min_beds:
+        GlobalVars.min_beds = GlobalVars.bed_count
+
+    # Only updated forecasted bed if it is less than bed capacity
+    if GlobalVars.forecasted_beds <= GlobalVars.bed_capacity:
+        GlobalVars.forecasted_beds = GlobalVars.bed_capacity - GlobalVars.min_beds
+
+    # Check if discharged and update bed count
+    for pat_id, patient in GlobalVars.all_patients.items():
+        if patient.status == 'Admitted' and  GlobalVars.time > patient.time_out:
+            patient.status = 'Discharged'
+            if GlobalVars.bed_count <= GlobalVars.bed_capacity:
+                GlobalVars.bed_count += 1
+    # Recheck if patient was waiting and add to admission if true
+    for pat_id, patient in GlobalVars.all_patients.items():
+        if patient.status == 'Waiting' and GlobalVars.bed_count > 0:
+            patient.status = 'Admitted'
+            patient.time_out = GlobalVars.time + patient.time_stay
+            GlobalVars.wait_count -= 1
+
+def process_patients(row: None):
+    # Update patient information
+    p = Patient()
+    # Check if beds available. If avail: patient is admitted and bed count is decreased.
+    # If not, patient is in wait queue
+    if GlobalVars.bed_count > 0:
+        GlobalVars.bed_count -= 1
+        p.status = 'Admitted'
+        p.time_out = p.time_in + p.time_stay
+    else:
+        p.status = 'Waiting'
+        GlobalVars.forecasted_beds += 1
+        GlobalVars.wait_count += 1
+        if not GlobalVars.fail_time:
+            GlobalVars.fail_time = GlobalVars.time
+    if not test_mode:
+        p.age = row[patient_generator.age_col]
+        p.condition = row[patient_generator.condition_col]
+        p.time_stay = row['Predicted stay']
+
+    # Common
+    # Update global vars
+    GlobalVars.time_list.append(GlobalVars.time)
+    GlobalVars.bed_avail_list.append(GlobalVars.bed_count)
+    GlobalVars.age_list.append(p.age)
+    GlobalVars.time_stay_list.append(p.time_stay)
+    GlobalVars.all_patients[p.id] = p
+    GlobalVars.condition_list.append(p.condition)
 
 
 async def trigger_admissions(q: Q):
     await show_charts(q)
     # Check for patient discharge
-    process_patients()
+    update_patients()
     # Add patient to queue
     if not test_mode:
         pat_df = q.app.pat_df.iloc[q.app.start_row:q.app.end_row, :]
@@ -113,36 +197,11 @@ async def trigger_admissions(q: Q):
         q.app.end_row = q.app.start_row + q.app.incoming_population_size
         fname = './score_patient.csv'
         pat_df.to_csv(fname, index=False)
-        if not test_mode:
-            pat_df['Predicted stay'] = get_mojo_preds(fname)
+        pat_df['Predicted stay'] = get_mojo_preds(fname)
         for i, row in pat_df.iterrows():
-            # Update patient information
-            p = Patient()
-            p.age = row[patient_generator.age_col]
-            p.condition = row[patient_generator.condition_col]
-            if not test_mode:
-                p.time_stay = row['Predicted stay']
-
-            # Update global vars
-            GlobalVars.time_list.append(GlobalVars.time)
-            GlobalVars.bed_avail_list.append(GlobalVars.bed_count)
-            GlobalVars.age_list.append(p.age)
-            GlobalVars.time_stay_list.append(p.time_stay)
-            GlobalVars.all_patients[p.id] = p
-            GlobalVars.condition_list.append(p.condition)
-            #print(
-            #f'Patient arriving at {GlobalVars.time} Bed count={GlobalVars.bed_count}, patient_count = {GlobalVars.patient_count}')
-            # Add to dict
+            process_patients(row)
     else:
-        p = Patient()
-        GlobalVars.time_list.append(GlobalVars.time)
-        GlobalVars.bed_avail_list.append(GlobalVars.bed_count)
-        GlobalVars.age_list.append(p.age)
-        GlobalVars.time_stay_list.append(p.time_stay)
-        #print(
-         #   f'Patient arriving at {GlobalVars.time} Bed count={GlobalVars.bed_count}, patient_count = {GlobalVars.patient_count}')
-        # Add to dict
-        GlobalVars.all_patients[p.id] = p
+        process_patients(None)
 
 
 def show_patients():
@@ -158,8 +217,8 @@ def plot_stat_card(q: Q):
     val = 0
     pc = 0
     # Avg time stay
-    q.app.c = q.page.add('plot31', ui.tall_series_stat_card(
-        box=app_config.plot31_box,
+    q.app.c = q.page.add('plot31', ui.wide_series_stat_card(
+        box=app_config.plot08_box,
         title='Avg Stay (Days)',
         value='={{intl qux minimum_fraction_digits=2 maximum_fraction_digits=2}}',
         aux_value='={{intl quux style="percent" minimum_fraction_digits=1 maximum_fraction_digits=1}}',
@@ -173,19 +232,12 @@ def plot_stat_card(q: Q):
 
 
 async def update_vars(q: Q):
-    if GlobalVars.bed_count < 0:
+    if GlobalVars.bed_count <= 0:
         print('WARNING: Bed count is below 0')
-        # break
-        q.page['notification'] = ui.form_card(box=app_config.notification_box,
-                                              items=[ui.message_bar('danger','WARNING!'),
-                                                     ui.text('Capacity Reached'),
-                                                     ui.button(name='restart_sim', label='Restart',
-                                                               primary=True)])
         q.app.limit_reached = True
-        await q.page.save()
-        #q.app.future.cancel()
+
+    # Increase tick by random amount between user defined range
     interval = np.random.randint(q.app.arrival_interval[0], q.app.arrival_interval[1])
-    # await q.sleep(interval)
     GlobalVars.time += interval
     try:
         await trigger_admissions(q)
@@ -197,7 +249,6 @@ async def update_vars(q: Q):
 async def setup_mojo(q: Q):
     # Write DAI license to scoring folder
     path = os.path.join(app_config.scoring_path, "license.sig")
-    print(f'touch {path}')
     os.system(f'touch {path}')
     fout = open(path, "w")
     txt = q.app.dai_license
@@ -223,6 +274,7 @@ async def setup_data(q: Q):
         q.page['main'].items = [
                                 ui.button(name='start_sim', label='Simulate', primary=True),
                                 ]
+    del q.page['menu']
     await q.page.save()
 
 
@@ -230,20 +282,25 @@ async def setup_data(q: Q):
 async def run_loop(q: Q):
     # Initialize global app vars
     GlobalVars.patient_count = 0
+    GlobalVars.wait_count = 0
     GlobalVars.time = 0
     GlobalVars.bed_capacity = q.app.bed_capacity
     GlobalVars.bed_count = q.app.bed_capacity
+    GlobalVars.min_beds = q.app.bed_capacity
+    GlobalVars.forecasted_beds = 0
+    GlobalVars.fail_time = None
     GlobalVars.time_list = []
     GlobalVars.bed_avail_list = []
     GlobalVars.age_list = []
     GlobalVars.condition_list = []
     GlobalVars.time_stay_list = []
+    GlobalVars.all_patients = {}
 
     q.app.start_row = 0
     q.app.end_row = q.app.incoming_population_size
 
     # Clear previous cards
-    del q.page['menu'], q.page['button_bar'], q.page['plot1']
+    del q.page['menu'],  q.page['plot1']
 
     q.page['button_bar'] = ui.form_card(box=app_config.button_bar_box,
                                   items=[ui.buttons([ui.button(name='restart_sim', label='Restart', primary=True),
@@ -258,10 +315,12 @@ async def run_loop(q: Q):
             await update_vars(q)
 
     # Show completion/success if sim completes and limit not reached
-    if (GlobalVars.time > q.app.simulation_time) and not q.app.limit_reached:
-        q.page['notification'] = ui.form_card(box=app_config.notification_box,
-                                              items=[ui.message_bar('success', 'SUCCESS!'),
-                                                     ui.text('Simulation complete'),
-                                                     ui.button(name='restart_sim', label='Restart',
-                                                               primary=True)])
+    if (GlobalVars.time > q.app.simulation_time):
+        if q.app.limit_reached:
+            status_message = 'Failure'
+            q.page['plot01'].plot_color = '$red'
+        else:
+            status_message = 'Success'
+        q.page['plot01'].value = status_message
+
         await q.page.save()

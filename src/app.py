@@ -13,10 +13,7 @@ def assign_col(arg_col, store_col):
     return store_col
 
 
-async def settings_menu(q: Q, warning: str=''):
-    if not q.app.settings_tab:
-        q.app.settings_tab = 'simulation'
-
+def assign_setting_vars(q: Q):
     q.app.settings_tab = assign_col(q.args.settings_tab, q.app.settings_tab)
     q.app.bed_capacity = assign_col(q.args.bed_capacity, q.app.bed_capacity)
     q.app.simulation_time = assign_col(q.args.simulation_time, q.app.simulation_time)
@@ -26,6 +23,13 @@ async def settings_menu(q: Q, warning: str=''):
     q.app.age_range = assign_col(q.args.age_range, q.app.age_range)
     q.app.conditions = assign_col(q.args.conditions, q.app.conditions)
     q.app.dai_license = assign_col(q.args.dai_license, q.app.dai_license)
+
+
+async def settings_menu(q: Q, warning: str=''):
+    if not q.app.settings_tab:
+        q.app.settings_tab = 'simulation'
+
+    assign_setting_vars(q)
 
     if not q.app.age_range:
         q.app.age_range = [18, 80]
@@ -116,34 +120,51 @@ async def settings_menu(q: Q, warning: str=''):
     q.page['main'] = ui.form_card(box=app_config.small_main_box, items=app_config.items_guide_tab)
     await q.page.save()
 
-def clean_cards(q: Q):
-    cards_to_clean = ['menu', 'plot1', 'plot21', 'plot22', 'plot23', 'plot31', 'button_bar', 'notification']
+async def clean_cards(q: Q):
+    cards_to_clean = ['menu', 'main', 'plot1', 'plot21', 'plot22', 'button_bar', 'notification',
+                      'plot01', 'plot02', 'plot03', 'plot04', 'plot05', 'plot06', 'plot07', 'plot08']
     for card in cards_to_clean:
         del q.page[card]
+    await q.page.save()
 
 
 @app('/')
 async def serve(q: Q):
-    # Initialiaze mlops client
-    if not q.app.initialized:
-        await settings_menu(q)
+    # Initialiaze app
+    #if not q.args.start_sim:
+     #   await clean_cards(q)
+      #  await settings_menu(q)
+    # Logo
+    if not q.app.logo_url:
+        q.app.logo_url, = await q.site.upload([app_config.logo_file])
+        q.app.app_icon_url, = await q.site.upload([app_config.app_icon_file])
+
+    q.page['logo'] = ui.markup_card(
+         box=app_config.logo_box,
+         title='',
+         content="""<p style='text-align:center; vertical-align: middle; display: table-cell; width: 134px;'>"""
+                """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.logo_url + """' height='50px' width='50px'> </a> </p>"""
+
+         )
+
     if q.args.next:
         if (not q.args.dai_license and not q.app.dai_license):
             q.app.settings_tab = 'dai'
             await settings_menu(q, 'Please enter DAI license')
             return
-        clean_cards(q)
+        assign_setting_vars(q)
+        await clean_cards(q)
         await setup_mojo(q)
         await setup_data(q)
     elif q.args.start_sim:
-        clean_cards(q)
+        await clean_cards(q)
         q.app.future = asyncio.ensure_future(run_loop(q))
     elif q.args.restart_sim:
-        clean_cards(q)
+        await clean_cards(q)
         q.app.stats_plotted = False
         q.app.limit_reached = False
         await settings_menu(q)
     else:
-        clean_cards(q)
+        await clean_cards(q)
         await settings_menu(q)
     await q.page.save()

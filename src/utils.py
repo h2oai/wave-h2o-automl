@@ -28,7 +28,6 @@ def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=
 # MOJO for regression problems
 def get_mojo_preds(fname):
     cmd = "java -Dai.h2o.mojos.runtime.license.file="+app_config.scoring_path+"/license.sig -cp "+app_config.scoring_path+"/mojo2-runtime.jar ai.h2o.mojos.ExecuteMojo "+app_config.scoring_path+"/pipeline.mojo "+fname
-    print(cmd)
     process = Popen(cmd.split(" "), stdout=PIPE, stderr=PIPE)
     stdout, stderr = process.communicate()
     print(stderr)
