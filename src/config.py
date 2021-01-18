@@ -10,13 +10,13 @@ class Configuration:
     Configuration file Data Labeling
     """
     def __init__(self):
-        self.title = 'Hospital Bed Simulation'
+        self.title = 'Hospital Capacity Simulation'
         self.subtitle = 'Hospital bed availability simulation'
         self.icon = 'Nav2DMapView'
         self.icon_color = '$yellow'
         self.default_title = ui.text_xl('Hospital bed availability')
         self.items_guide_tab = [
-            ui.frame(content='<h2><center>Hospital Bed Simulation</center></h2>', height='60px'),
+            ui.frame(content='<h2><center>Hospital Capacity Simulation</center></h2>', height='60px'),
             ui.text("""
             
 Hospital capacity simulation and predicting patient stay using a H2O MOJO.
