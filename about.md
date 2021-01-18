@@ -1,19 +1,18 @@
-**App Goal:** Wave application for H2O-3 AutoML
+**App Goal:** Hospital Capacity Simulation
 
-**Target Audience:** Data Scientists
+**Target Audience:** Hospitals
 
 **Actively Being Maintained:** Yes
 
-**Last Updated:** December 15th, 2020
+**Last Updated:** January 17th, 2021
 
-**Comes with Demo Mode (pre-loaded data, models, results, etc.):** Yes
+**Comes with Demo Mode (pre-loaded data, models, results, etc.):** No
 
-**Allows for Uploading and Using New Data:** Yes
+**Allows for Uploading and Using New Data:** No
 
-**Detailed Description:** This application allows the user to upload a csv file and then train a model using H2O-3 AutoML
+**Detailed Description:** Hospital capacity simulation and predicting patient stay using a H2O MOJO.
 
 ### **Features**:
-* **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.
-* **Leaderboard**: Visualizing the AML leaderboard.
-* **Explainability**: Shows feature importance and row Shapley contributions.
-* **Deployment**: Select a model for MOJO download.
+* **Patient Simulation**: Uses Synthea to generate synthetic patient data with user defined medical conditions.
+* **Hospital Stay Prediction**: Uses a H2O DAI MOJO to predict hospital stay.
+* **Simulation**: Simulates a hospital environment with user defined settings to predict bed availability.

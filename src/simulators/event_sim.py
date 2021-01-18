@@ -31,6 +31,7 @@ class GlobalVars:
     time_stay_list = []
     fail_time = None
 
+
 # Stores individual patient attributes
 class Patient:
     def __init__(self):
@@ -52,7 +53,7 @@ async def show_charts(q: Q):
             box=app_config.plot01_box,
             title='',
             content="""<p style='text-align:center; vertical-align: top; display: table-cell; width: 134px;'>"""
-                    """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.app_icon_url + """' height='60px' width='60px'> </a> </p>"""
+                    """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.app_icon_url + """' height='40px' width='40px'> </a> </p>"""
 
         )
 
@@ -89,9 +90,9 @@ async def show_charts(q: Q):
                 title='Hospital Bed Availability',
                 data=data('time beds', rows=rows),
                 plot=ui.plot([ui.mark(type='line', x='=time', y='=beds', x_min=0, y_min=0-GlobalVars.bed_capacity, y_max=GlobalVars.bed_capacity+50,
-                                      x_title='Time', y_title='Hospital Bed Availability', color='#33BBFF'),
-                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', color='$red'),
-                              ui.mark(y=0, label='Min Capacity', color='#FF0000')]
+                                      x_title='Time', y_title='Hospital Bed Availability', color='#F39C12'),
+                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', color=''),
+                              ui.mark(y=0, label='Min Capacity', color='')]
                              ))
 
         # Histogram of age
@@ -102,7 +103,7 @@ async def show_charts(q: Q):
                 title='Histogram of Age',
                 data=data('age count', rows=rows),
                 plot=ui.plot([ui.mark(type='interval', x='=age', y='=count', x_min=0, y_min=0,
-                                      x_title='Age', y_title='Count', color='#4EA913')]
+                                      x_title='Age', y_title='Count', color='#F4D03F')]
                              ))
 
         # Histogram of conditions
@@ -113,7 +114,7 @@ async def show_charts(q: Q):
                 title='Histogram of Conditions',
                 data=data('condition count', rows=rows),
                 plot=ui.plot([ui.mark(type='interval', x='=condition', y='=count', x_min=0, y_min=0,
-                                      x_title='condition', y_title='Count', color='#EE4F0A')]
+                                      x_title='condition', y_title='Count', color='#EC7063')]
                              ))
 
 
@@ -302,10 +303,6 @@ async def run_loop(q: Q):
     # Clear previous cards
     del q.page['menu'],  q.page['plot1']
 
-    q.page['button_bar'] = ui.form_card(box=app_config.button_bar_box,
-                                  items=[ui.buttons([ui.button(name='restart_sim', label='Restart', primary=True),
-                                                       ])])
-
     # Run loop till simulation time end
     if test_mode:
         while (GlobalVars.time <= q.app.simulation_time):
@@ -323,4 +320,8 @@ async def run_loop(q: Q):
             status_message = 'Success'
         q.page['plot01'].value = status_message
 
+        q.page['button_bar'] = ui.form_card(box=app_config.button_bar_box,
+                                            items=[ui.buttons(
+                                                [ui.button(name='restart_sim', label='Restart', primary=True),
+                                                 ])])
         await q.page.save()
