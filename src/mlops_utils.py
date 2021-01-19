@@ -7,8 +7,60 @@ import requests
 from .utils import *
 
 
+# Shows table of DAI experiments
+def show_dai_experiments(q: Q, card_name, card_box):
+    driverless = q.user.dai_client
+    experiments = driverless.experiments.list()
+    experiment_names = []
+    experiment_keys = []
+    if experiments:
+        for experiment in experiments:
+            experiment_names.append(experiment.name)
+            experiment_keys.append(experiment.key)
+        q.user.experiments_df = pd.DataFrame({'Experiment Key': experiment_keys, 'Experiment Name': experiment_names})
+    else:
+        q.user.experiments_df = pd.DataFrame()
+    data_table = table_from_df(q.user.experiments_df, 'dai_experiments_table', filterable=True, searchable=True, groupable=True)
+    q.page[card_name] = ui.form_card(box=card_box, items=[
+        ui.text_xl('DAI Experiments'),
+        data_table
+    ])
+
+
+# Return list of projects
+def mlops_list_projects(q: Q, mlops_client:mlops.Client, card_name, card_box):
+    projects = mlops_client.storage.project.list_projects(mlops.StorageListProjectsRequest()).project
+    created_time = []
+    desc = []
+    names = []
+    ids = []
+    for project in projects:
+        ids.append(project.id)
+        names.append(project.display_name)
+        desc.append(project.description)
+        created_time.append(project.created_time)
+
+    q.user.projects_df = pd.DataFrame({'id': ids, 'display_name': names, 'description': desc, 'created_time': created_time})
+    mlops_proj_table = table_from_df(q.user.projects_df, 'mlops_projects_table')
+    q.page[card_name] = ui.form_card(box=card_box, items=[
+        ui.text_xl('MLOPs Projects'),
+        mlops_proj_table
+    ])
+
+
+def mlops_list_deployments(q: Q, mlops_client : mlops.Client, project_id):
+    status = mlops_client.storage.deployment.list_deployments(mlops.StorageListDeploymentsRequest(project_id)).deployment
+    """
+    status = mlops.DeployListDeploymentStatusesResponse = (
+        mlops_client.deployer.deployment_status.list_deployment_statuses(
+            mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
+        )).deployment_status
+    """
+    print(f'TKTK!! {status}')
+
+
 # Functions below leveraged from tomk's example
-def deploy_experiment(
+def mlops_deploy_experiment(
         mlops_client: mlops.Client,
         project_id: str,
         experiment_id: str,
@@ -41,7 +93,7 @@ def deploy_experiment(
     ).deployment
 
 
-def wait_for_status(
+def mlops_wait_for_status(
         statuses: Collection[int],
         req: requests.Request,
         max_retries: int = 10,
@@ -67,7 +119,7 @@ def wait_for_status(
     return r
 
 
-def deployment_should_become_healthy(deployment_id, mlops_client):
+def mlops_deployment_should_become_healthy(deployment_id, mlops_client):
     svc = mlops_client.deployer.deployment_status
     status: mlops.DeployDeploymentStatus
     dead_line = time.monotonic() + 120
@@ -90,24 +142,7 @@ def deployment_should_become_healthy(deployment_id, mlops_client):
     return status
 
 
-# Shows table of DAI experiments
-async def show_dai_experiments(q: Q, card_name, card_box):
-    driverless = q.user.dai_client
-    experiments = driverless.experiments.list()
-    experiment_names = []
-    experiment_keys = []
-    if experiments:
-        for experiment in experiments:
-            experiment_names.append(experiment.name)
-            experiment_keys.append(experiment.key)
-        q.user.experiments_df = pd.DataFrame({'Experiment Key': experiment_keys, 'Experiment Name': experiment_names})
-    else:
-        q.user.experiments_df = pd.DataFrame()
-    data_table = table_from_df(q.user.experiments_df, 'dai_experiments_table', filterable=True, searchable=True, groupable=True)
-    q.page[card_name] = ui.form_card(box=card_box, items=[
-        ui.text_xl('DAI Experiments'),
-        data_table
-    ])
+
 
 
 # Links DAI experiment to a DAI project
@@ -130,7 +165,7 @@ async def mlops_deploy(q: Q):
     project_key = q.user.project_key
     experiment_key = q.user.experiment_key
 
-    deployment = deploy_experiment(
+    deployment = mlops_deploy_experiment(
         mlops_client=mlops_client,
         project_id=project_key,
         experiment_id=experiment_key,
@@ -143,7 +178,7 @@ async def mlops_deploy(q: Q):
 async def mlops_scorer_setup(q: Q):
     mlops_client = q.user.mlops_client
     deployment_id = q.user.deployment_id
-    status = deployment_should_become_healthy(mlops_client=mlops_client,
+    status = mlops_deployment_should_become_healthy(mlops_client=mlops_client,
                                               deployment_id=deployment_id)
     q.user.sample_url = status.scorer.sample_request.url
     q.user.score_url = status.scorer.score.url
@@ -155,7 +190,7 @@ async def mlops_scorer_setup(q: Q):
     sample_url = q.user.sample_url
     score_url = q.user.score.url
 
-    r = wait_for_status(
+    r = mlops_wait_for_status(
         [200],
         req=requests.Request(
             "GET",
@@ -169,6 +204,11 @@ async def mlops_scorer_setup(q: Q):
     print(response.text, flush=True)
 
     return response.text
+
+
+def mlops_delete_project(q: Q, project_key):
+    driverless = q.user.dai_client
+    driverless._backend.delete_project(project_key)
 
 
 # Undeploy, unlink experiment from project and delete project
