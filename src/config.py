@@ -35,6 +35,8 @@ Sample Data: Vessel traffic data can be downloaded from https://marinecadastre.g
         self.main_box = '1 2 -1 -1'
         self.plot11_box = '1 2 5 -1'
         self.plot12_box = '6 2 -1 -1'
+        self.plot1_box = '1 2 -1 3'
+        self.plot2_box = '1 4 -1 -1'
         self.tmp_dir = '/tmp'
 
 app_config = Configuration()

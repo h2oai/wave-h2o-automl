@@ -5,6 +5,7 @@ import driverlessai
 from .config import *
 from .mlops_utils import *
 from .utils import *
+import requests
 
 async def init_app(q: Q):
     q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
@@ -21,8 +22,6 @@ async def init_app(q: Q):
             ui.text(f'User: {q.auth.username}'),
             #ui.text(f'Projects: {projects.project}'),
             ui.textbox(name='dai_address', label='DAI address', required=True, value='https://steam.wave.h2o.ai/proxy/driverless/5/'),
-            ui.textbox(name='dai_uname', label='DAI username', required=False),
-            ui.textbox(name='dai_passwd', label='DAI password', password=True, required=False),
             ui.button(name='next_dai_address', label='Next', primary=True)
         ]
     )
@@ -61,12 +60,75 @@ async def show_mlops_details(q: Q):
     projects_df = q.user.projects_df
     selected_index = int(q.args.mlops_projects_table[0])
     q.user.project_id = projects_df['id'][selected_index]
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=[ui.text(f'selected id {q.user.project_id}'),
-                            ui.buttons([ui.button(name='next_delete_project', label='Delete Project', primary=True),
-                                        ui.button(name='back_mlops_details', label='Back', primary=True)])
+    q.user.project_name = projects_df['display_name'][selected_index]
+    q.page['plot1'] = ui.form_card(box=app_config.plot1_box,
+                                  items=[ui.text_xl('MLOPs Project'),
+                                         ui.text(f'**MLOPs Project Name:**: {q.user.project_name}'),
+                                         ui.text(f'**MLOPs Project Id:**: {q.user.project_id}'),
+                                         ui.buttons(
+                                             [ui.button(name='next_delete_project', label='Delete Project', primary=True),
+                                              ui.button(name='back', label='Back', primary=True)])
                             ])
+    mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
     await q.page.save()
-    #mlops_list_deployments(q, q.user.mlops_client, q.user.project_id)
+
+
+async def show_experiment_details(q: Q):
+    experiment_index = int(q.args.dai_experiments_table[0])
+    q.user.experiment_key = q.user.experiments_df['Experiment Key'][experiment_index]
+    q.page['main'] = ui.form_card(box=app_config.main_box,
+                                  items=[ui.text_xl('DAI Experiment'),
+                                         ui.text(f'**Experiment Key:** {q.user.experiment_key}'),
+                                         ui.text(f'**Experiment Name:** {q.user.experiment_name}'),
+                                         ui.textbox(name='project_name', label='Project Name'),
+                                         ui.textbox(name='project_desc', label='Project Description'),
+                                         ui.buttons(
+                                             [ui.button(name='next_deploy_experiment', label='Create Project & Deploy Experiment', primary=True),
+                                              ui.button(name='back', label='Back', primary=True)])
+                                         ])
+
+
+async def show_deployment(q: Q):
+    if q.args.mlops_deployments_table:
+        q.app.selected_table_index = q.args.mlops_deployments_table[0]
+    deployment_index = int(q.app.selected_table_index)
+    q.user.deployment_id = q.user.deployments_df['id'][deployment_index]
+    endpoint_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/score'
+    sample_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/sample_request'
+    sample_query = mlops_get_sample_request(sample_url)
+    if q.args.score_request:
+        response = mlops_get_score(endpoint_url, q.args.score_request)
+        sample_query = q.args.score_request
+    else:
+        response = ''
+    q.page['main'] = ui.form_card(box=app_config.main_box,
+                                  items=[ui.text_xl('Deployment'),
+                                         ui.text(f'**Experiment Key:** {q.user.experiment_key}'),
+                                         ui.text(f'**Experiment Name:** {q.user.experiment_name}'),
+                                         ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
+                                         ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
+                                         ui.text(f'**Deployment Sample URL:** {sample_url}'),
+                                         ui.textbox(name='score_request', label='Request Query', value=sample_query),
+                                         ui.buttons(
+                                             [ui.button(name='next_score', label='Score', primary=True),
+                                              ui.button(name='back', label='Back', primary=True)]),
+                                         ui.textbox(name='response', label='Response', value=response)])
+
+
+async def deploy_experiment(q: Q):
+    await link_experiment_to_project(q)
+    q.page['main'] = ui.form_card(box=app_config.main_box,
+                                  items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
+                                         ui.progress('Deploying in MLOps')])
+    await q.page.save()
+    await mlops_deploy(q)
+    q.page['main'].items = [ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
+                            ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**')
+                            ]
+    await q.page.save()
+    await q.sleep(2)
+    await show_tables(q)
+
 
 @app('/')
 async def serve(q: Q):
@@ -85,25 +147,24 @@ async def serve(q: Q):
     # If a user clicks on experiment in DAI table, link to project and then deploy
     elif q.args.dai_experiments_table:
         await clean_cards(q)
-        await link_experiment_to_project(q)
-        q.page['main'] = ui.form_card(box=app_config.main_box,
-                                      items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
-                                             ui.progress('Deploying in MLOps')])
-        await q.page.save()
-        await mlops_deploy(q)
-        q.page['main'].items = [ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
-                                ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**')
-                                ]
-        await q.page.save()
-        await q.sleep(2)
-        await show_tables(q)
+        await show_experiment_details(q)
+    elif q.args.next_deploy_experiment:
+        await clean_cards(q)
+        await deploy_experiment(q)
     elif q.args.next_delete_project:
         mlops_delete_project(q, q.user.project_id)
-        q.page['main'].items = [ui.message_bar('success', f'Deleted project {q.user.project_id}')]
+        q.page['main'] = ui.form_card(box=app_config.main_box,
+                                      items=[ui.message_bar('success', f'Deleted project {q.user.project_id}')])
         await q.page.save()
         await q.sleep(2)
         await show_tables(q)
-    elif q.args.back_mlops_details:
+    elif q.args.mlops_deployments_table:
+        await clean_cards(q)
+        await show_deployment(q)
+    elif q.args.next_score:
+        await clean_cards(q)
+        await show_deployment(q)
+    elif q.args.back:
         await show_tables(q)
         # MLOps predict
         #prediction = await q.run(mlops_scorer_setup, q)
