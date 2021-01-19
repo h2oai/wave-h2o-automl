@@ -29,17 +29,11 @@ async def init_app(q: Q):
 
 
 async def init_dai_client(q: Q):
-    if q.args.dai_uname:
-        q.user.dai_client = driverlessai.Client(
-            address=q.args.dai_address,
-            username=q.args.dai_uname,
-            password=q.args.dai_passwd
-        )
-    else:
-        q.user.dai_client = driverlessai.Client(
-            address=q.args.dai_address,
-            token_provider=lambda: q.auth.access_token
-        )
+    if q.args.dai_address:
+        q.user.dai_address = q.args.dai_address
+    q.user.dai_client = driverlessai.Client(
+            address=q.user.dai_address,
+            token_provider=lambda: q.auth.access_token)
     await show_tables(q)
 
 
@@ -93,26 +87,45 @@ async def show_deployment(q: Q):
         q.app.selected_table_index = q.args.mlops_deployments_table[0]
     deployment_index = int(q.app.selected_table_index)
     q.user.deployment_id = q.user.deployments_df['id'][deployment_index]
+    q.user.experiment_id = q.user.deployments_df['experiment_id'][deployment_index]
+    q.user.project_id = q.user.deployments_df['project_id'][deployment_index]
+
     endpoint_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/score'
     sample_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/sample_request'
     sample_query = mlops_get_sample_request(sample_url)
     if q.args.score_request:
         response = mlops_get_score(endpoint_url, q.args.score_request)
-        sample_query = q.args.score_request
+        q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
+        score_table = table_from_df(q.user.scores_df, 'scores_table')
+
+    if q.args.score_request:
+        q.page['main'] = ui.form_card(box=app_config.main_box,
+                                      items=[ui.text_xl('Deployment'),
+                                             ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
+                                             ui.text(f'**Project Id:** {q.user.project_id}'),
+                                             ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
+                                             ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
+                                             ui.text(f'**Deployment Sample URL:** {sample_url}'),
+                                             ui.textbox(name='score_request', label='Request Query',
+                                                        value=q.args.score_request),
+                                             ui.buttons(
+                                                 [ui.button(name='next_score', label='Score', primary=True),
+                                                  ui.button(name='back', label='Back', primary=True)]),
+                                             ui.text_xl('Predictions'),
+                                             score_table])
     else:
-        response = ''
-    q.page['main'] = ui.form_card(box=app_config.main_box,
-                                  items=[ui.text_xl('Deployment'),
-                                         ui.text(f'**Experiment Key:** {q.user.experiment_key}'),
-                                         ui.text(f'**Experiment Name:** {q.user.experiment_name}'),
-                                         ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
-                                         ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
-                                         ui.text(f'**Deployment Sample URL:** {sample_url}'),
-                                         ui.textbox(name='score_request', label='Request Query', value=sample_query),
-                                         ui.buttons(
-                                             [ui.button(name='next_score', label='Score', primary=True),
-                                              ui.button(name='back', label='Back', primary=True)]),
-                                         ui.textbox(name='response', label='Response', value=response)])
+        q.page['main'] = ui.form_card(box=app_config.main_box,
+                                      items=[ui.text_xl('Deployment'),
+                                             ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
+                                             ui.text(f'**Project Id:** {q.user.project_id}'),
+                                             ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
+                                             ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
+                                             ui.text(f'**Deployment Sample URL:** {sample_url}'),
+                                             ui.textbox(name='score_request', label='Request Query',
+                                                        value=sample_query),
+                                             ui.buttons(
+                                                 [ui.button(name='next_score', label='Score', primary=True),
+                                                  ui.button(name='back', label='Back', primary=True)])])
 
 
 async def deploy_experiment(q: Q):
@@ -139,7 +152,6 @@ async def serve(q: Q):
     # User clicks on next on DAI selection screen
     if q.args.next_dai_address:
         await show_progress(q, 'main', app_config.main_box, f'Connecting to DAI')
-        await clean_cards(q)
         await init_dai_client(q)
     elif q.args.mlops_projects_table:
         await clean_cards(q)
@@ -165,7 +177,7 @@ async def serve(q: Q):
         await clean_cards(q)
         await show_deployment(q)
     elif q.args.back:
-        await show_tables(q)
+        await init_dai_client(q)
         # MLOps predict
         #prediction = await q.run(mlops_scorer_setup, q)
         #q.page['main'].items = [ui.text(f'{q.user.sample_url} : {q.user.score_url} {prediction}')]

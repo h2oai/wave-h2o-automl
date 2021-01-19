@@ -208,7 +208,7 @@ def mlops_get_score(score_url, query):
     query_json = json.loads(query)
     response = requests.post(url=score_url, json=query_json)
     assert response.status_code == 200
-    return response.text
+    return json.loads(response.text)
 
 
 def mlops_delete_project(q: Q, project_key):
