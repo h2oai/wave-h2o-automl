@@ -39,8 +39,8 @@ async def init_dai_client(q: Q):
 
 async def show_tables(q: Q):
     await clean_cards(q)
-    show_dai_experiments(q, 'experiments', app_config.plot11_box)
-    mlops_list_projects(q, q.user.mlops_client, 'projects', app_config.plot12_box)
+    q.user.experiments_df = show_dai_experiments(q, 'experiments', app_config.plot11_box)
+    q.user.projects_df = mlops_list_projects(q, q.user.mlops_client, 'projects', app_config.plot12_box)
     await q.page.save()
 
 
@@ -63,7 +63,7 @@ async def show_mlops_details(q: Q):
                                              [ui.button(name='next_delete_project', label='Delete Project', primary=True),
                                               ui.button(name='back', label='Back', primary=True)])
                             ])
-    mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
+    q.user.deployments_df = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
     await q.page.save()
 
 
@@ -129,12 +129,24 @@ async def show_deployment(q: Q):
 
 
 async def deploy_experiment(q: Q):
+    # Link experiment to project
     await link_experiment_to_project(q)
     q.page['main'] = ui.form_card(box=app_config.main_box,
                                   items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
                                          ui.progress('Deploying in MLOps')])
     await q.page.save()
-    await mlops_deploy(q)
+
+    # Deploy experiment
+    mlops_client = q.user.mlops_client
+    project_key = q.user.project_key
+    experiment_key = q.user.experiment_key
+    deployment = mlops_deploy_experiment(
+        mlops_client=mlops_client,
+        project_id=project_key,
+        experiment_id=experiment_key,
+        type=mlops.StorageDeploymentType.SINGLE_MODEL
+    )
+    q.user.deployment_id = deployment.id
     q.page['main'].items = [ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
                             ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**')
                             ]
