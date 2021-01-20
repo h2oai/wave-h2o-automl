@@ -7,25 +7,11 @@ from .mlops_utils import *
 from .utils import *
 import requests
 
-async def init_app(q: Q):
-    q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
-                                      icon=app_config.icon, icon_color=app_config.icon_color)
-    await q.page.save()
+
+def init_mlops_client(q: Q):
     # Get project list from MLOps Storage via MLOps Gateway + Python Client
     q.user.mlops_client = mlops.Client(
         gateway_url=os.environ['STORAGE_URL'], token_provider=lambda: q.auth.access_token)
-    
-
-    q.page['main'] = ui.form_card(
-        box=app_config.main_box,
-        items=[
-            ui.text(f'User: {q.auth.username}'),
-            #ui.text(f'Projects: {projects.project}'),
-            ui.textbox(name='dai_address', label='DAI address', required=True, value='https://steam.wave.h2o.ai/proxy/driverless/5/'),
-            ui.button(name='next_dai_address', label='Next', primary=True)
-        ]
-    )
-    await q.page.save()
 
 
 async def init_dai_client(q: Q):
@@ -35,6 +21,29 @@ async def init_dai_client(q: Q):
             address=q.user.dai_address,
             token_provider=lambda: q.auth.access_token)
     await show_tables(q)
+
+
+async def init_app(q: Q, warning: str=''):
+    init_mlops_client(q)
+    q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
+                                      icon=app_config.icon, icon_color=app_config.icon_color)
+    """q.page['navmenu'] = ui.toolbar_card(
+        box=app_config.navbar_box,
+        items=[ui.command(name="#mlops", label="Steam", caption="Steam", icon="OfflineStorageSolid"),
+               ui.command(name="#steam", label="MLOps", caption="MLOps", icon="OfflineStorageSolid")
+               ]
+    )
+    """
+    q.page['main'] = ui.form_card(
+        box=app_config.main_box,
+        items=[
+            ui.text(f'User: {q.auth.username}'),
+            ui.message_bar('warning', warning),
+            ui.textbox(name='dai_address', label='DAI address', required=True, value=''),
+            ui.button(name='next_dai_address', label='Next', primary=True)
+        ]
+    )
+    await q.page.save()
 
 
 async def show_tables(q: Q):
@@ -82,23 +91,26 @@ async def show_experiment_details(q: Q):
                                          ])
 
 
-async def show_deployment(q: Q):
+async def show_deployment_details(q: Q):
     if q.args.mlops_deployments_table:
         q.app.selected_table_index = q.args.mlops_deployments_table[0]
     deployment_index = int(q.app.selected_table_index)
     q.user.deployment_id = q.user.deployments_df['id'][deployment_index]
     q.user.experiment_id = q.user.deployments_df['experiment_id'][deployment_index]
     q.user.project_id = q.user.deployments_df['project_id'][deployment_index]
-
+    #deployment_state = q.user.deployments_df['state'][deployment_index]
     endpoint_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/score'
     sample_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/sample_request'
-    sample_query = mlops_get_sample_request(sample_url)
-    if q.args.score_request:
-        response = mlops_get_score(endpoint_url, q.args.score_request)
-        q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
-        score_table = table_from_df(q.user.scores_df, 'scores_table')
 
+    # Get sample query from sample URL
     if q.args.score_request:
+        await show_progress(q, 'main', app_config.main_box, 'Scoring..')
+        response = mlops_get_score(endpoint_url, q.args.score_request)
+        if response:
+            q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
+            score_table = table_from_df(q.user.scores_df, 'scores_table')
+        else:
+            score_table = ui.text('Scorer not ready. Please retry')
         q.page['main'] = ui.form_card(box=app_config.main_box,
                                       items=[ui.text_xl('Deployment'),
                                              ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
@@ -114,6 +126,8 @@ async def show_deployment(q: Q):
                                              ui.text_xl('Predictions'),
                                              score_table])
     else:
+        await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
+        sample_query = mlops_get_sample_request(sample_url)
         q.page['main'] = ui.form_card(box=app_config.main_box,
                                       items=[ui.text_xl('Deployment'),
                                              ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
@@ -157,24 +171,35 @@ async def deploy_experiment(q: Q):
 
 @app('/')
 async def serve(q: Q):
+    hash = q.args['#']
+    if hash == 'home':
+        await clean_cards(q)
+        await init_app(q)
     # Initialiaze mlops client
-    if not q.app.initialized:
+    elif not q.app.initialized:
         await init_app(q)
         q.app.initialized = True
     # User clicks on next on DAI selection screen
     if q.args.next_dai_address:
+        if not q.args.dai_address:
+            await init_app(q, 'Please enter DAI address in Steam. eg: https://steam.wave.h2o.ai/proxy/driverless/5/')
+            return
         await show_progress(q, 'main', app_config.main_box, f'Connecting to DAI')
         await init_dai_client(q)
+    # User clicks on a project in the MLOps table
     elif q.args.mlops_projects_table:
         await clean_cards(q)
+        init_mlops_client(q)
         await show_mlops_details(q)
     # If a user clicks on experiment in DAI table, link to project and then deploy
     elif q.args.dai_experiments_table:
         await clean_cards(q)
         await show_experiment_details(q)
+    # User selects experiment deployment
     elif q.args.next_deploy_experiment:
         await clean_cards(q)
         await deploy_experiment(q)
+    # User deletes a project
     elif q.args.next_delete_project:
         mlops_delete_project(q, q.user.project_id)
         q.page['main'] = ui.form_card(box=app_config.main_box,
@@ -182,17 +207,17 @@ async def serve(q: Q):
         await q.page.save()
         await q.sleep(2)
         await show_tables(q)
+    # User clicks on a row in the deployments table
     elif q.args.mlops_deployments_table:
         await clean_cards(q)
-        await show_deployment(q)
+        await show_deployment_details(q)
+    # User scoring a request using a deployment
     elif q.args.next_score:
         await clean_cards(q)
-        await show_deployment(q)
+        await show_deployment_details(q)
     elif q.args.back:
         await init_dai_client(q)
-        # MLOps predict
-        #prediction = await q.run(mlops_scorer_setup, q)
-        #q.page['main'].items = [ui.text(f'{q.user.sample_url} : {q.user.score_url} {prediction}')]
-        #await q.page.save()
-
+    else:
+        await clean_cards(q)
+        await init_app(q)
     await q.page.save()

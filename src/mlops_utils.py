@@ -58,6 +58,7 @@ def mlops_list_deployments(q: Q, mlops_client: mlops.Client, project_id, card_na
     projects = []
     ids = []
     for deployment in deployments:
+        print (f'TK! deployment iter {deployment}')
         ids.append(deployment.id)
         projects.append(deployment.project_id)
         experiments.append(deployment.experiment_id)
@@ -103,6 +104,29 @@ def mlops_deploy_experiment(
             )
         )
     ).deployment
+
+
+# Check status of deployment
+# TODO This is current broken and under investigation. Thread on slack: https://h2oai.slack.com/archives/C013PAVE2CS/p1611171200155400
+def mlops_check_deployment_status(mlops_client, deployment_id):
+    """
+
+    :param mlops_client:
+    :param project_id:
+    :return:
+    statuses: mlops.DeployListDeploymentStatusesResponse
+    statuses = mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
+    #statuses = mlops_client.deployer.deployment_status.list_deployment_statuses(
+    #    mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
+    #)
+    """
+    svc = mlops_client.deployer.deployment_status
+    status: mlops.DeployDeploymentStatus
+    status = svc.get_deployment_status(
+            mlops.DeployGetDeploymentStatusRequest(deployment_id=deployment_id)
+        ).deployment_status
+
+    return status.state
 
 
 # Wait for deployment to be a specific status
@@ -152,8 +176,8 @@ def mlops_deployment_should_become_healthy(deployment_id, mlops_client):
         ):
             break
 
-    assert status.state == mlops.DeployDeploymentState.HEALTHY
-    return status
+    #assert status.state == mlops.DeployDeploymentState.HEALTHY
+    return status.state
 
 
 # Links DAI experiment to a DAI project
@@ -168,18 +192,6 @@ async def link_experiment_to_project(q: Q):
     )
  
 
-# Use MLOps to setup scorer
-async def mlops_scorer_setup(q: Q):
-    mlops_client = q.user.mlops_client
-    deployment_id = q.user.deployment_id
-    status = mlops_deployment_should_become_healthy(mlops_client=mlops_client,
-                                              deployment_id=deployment_id)
-    q.user.sample_url = status.scorer.sample_request.url
-    q.user.score_url = status.scorer.score.url
-
-    print(q.user.sample_url, q.user.score_url)
-
-
 # Get a sample request for a deployment
 def mlops_get_sample_request(sample_url):
     r = mlops_wait_for_status(
@@ -189,16 +201,22 @@ def mlops_get_sample_request(sample_url):
             sample_url,
         ),
     )
-    assert r.ok
-    return json.dumps(r.json())
+    # Return sample URL response if valid
+    if r.ok:
+        return json.dumps(r.json())
+    else:
+        return None
 
 
 # Score using endpoint URL of a deployment
 def mlops_get_score(score_url, query):
     query_json = json.loads(query)
     response = requests.post(url=score_url, json=query_json)
-    assert response.status_code == 200
-    return json.loads(response.text)
+    # Return response if status is valid
+    if response.status_code == 200:
+        return json.loads(response.text)
+    else:
+        return None
 
 
 # Delete an MLOps project

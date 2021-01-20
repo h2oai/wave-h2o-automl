@@ -11,9 +11,9 @@ class Configuration:
     Configuration file Data Labeling
     """
     def __init__(self):
-        self.title = 'H2O MLOps & DAI'
-        self.subtitle = 'Demo of MLOps & DAI in Wave'
-        self.icon = 'Nav2DMapView'
+        self.title = 'H2O MLOps Demo'
+        self.subtitle = 'Demo of Steam DAI and MLOps in Wave'
+        self.icon = 'OfflineStorageSolid'
         self.icon_color = '$yellow'
         self.default_title = ui.text_xl('MLOps & DAI')
         self.items_guide_tab = [
@@ -31,6 +31,7 @@ Sample Data: Vessel traffic data can be downloaded from https://marinecadastre.g
             """),
         ]
         self.banner_box = '1 1 -1 1'
+        self.navbar_box = '11 1 -1 1'
         self.logo_box = '12 1 -1 1'
         self.main_box = '1 2 -1 -1'
         self.plot11_box = '1 2 5 -1'

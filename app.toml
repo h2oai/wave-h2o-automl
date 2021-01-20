@@ -1,9 +1,10 @@
 [App]
 Name = "mlops-test"
-Version = "0.0.1"
-Title = "mlops test"
-Description = "App that demonstrates MLOps integration"
+Version = "0.1.0"
+Title = "MLOps Demo"
+Description = "Steam/DAI and MLOps Demo"
 Category = "Other"
+LongDescription = "about.md"
 
 [Runtime]
 Module = "src.app"
