@@ -6,13 +6,19 @@ from .config import *
 from .mlops_utils import *
 from .utils import *
 import requests
+import h2osteam
+from h2osteam.clients import DriverlessClient
+
+
+def init_steam_client(q: Q):
+    h2osteam.login(url='https://steam.wave.h2o.ai/', access_token=lambda: q.auth.access_token)
 
 
 def init_mlops_client(q: Q):
     # Get project list from MLOps Storage via MLOps Gateway + Python Client
     q.user.mlops_client = mlops.Client(
         gateway_url=os.environ['STORAGE_URL'], token_provider=lambda: q.auth.access_token)
-
+    print(f'Auth access token: {q.auth.access_token}')
 
 async def init_dai_client(q: Q):
     if q.args.dai_address:
@@ -39,7 +45,7 @@ async def init_app(q: Q, warning: str=''):
         items=[
             ui.text(f'User: {q.auth.username}'),
             ui.message_bar('warning', warning),
-            ui.textbox(name='dai_address', label='DAI address', required=True, value=''),
+            ui.textbox(name='dai_address', label='DAI address', required=True, value='https://steam.wave.h2o.ai/proxy/driverless/5/'),
             ui.button(name='next_dai_address', label='Next', primary=True)
         ]
     )
@@ -49,7 +55,7 @@ async def init_app(q: Q, warning: str=''):
 async def show_tables(q: Q):
     await clean_cards(q)
     q.user.experiments_df = show_dai_experiments(q, 'experiments', app_config.plot11_box)
-    q.user.projects_df = mlops_list_projects(q, q.user.mlops_client, 'projects', app_config.plot12_box)
+    q.user.projects = mlops_list_projects(q, q.user.mlops_client, 'projects', app_config.plot12_box)
     await q.page.save()
 
 
@@ -60,10 +66,10 @@ async def clean_cards(q: Q):
 
 
 async def show_mlops_details(q: Q):
-    projects_df = q.user.projects_df
+    projects = q.user.projects
     selected_index = int(q.args.mlops_projects_table[0])
-    q.user.project_id = projects_df['id'][selected_index]
-    q.user.project_name = projects_df['display_name'][selected_index]
+    q.user.project_id = projects[selected_index].id
+    q.user.project_name = projects[selected_index].display_name
     q.page['plot1'] = ui.form_card(box=app_config.plot1_box,
                                   items=[ui.text_xl('MLOPs Project'),
                                          ui.text(f'**MLOPs Project Name:**: {q.user.project_name}'),
@@ -72,7 +78,7 @@ async def show_mlops_details(q: Q):
                                              [ui.button(name='next_delete_project', label='Delete Project', primary=True),
                                               ui.button(name='back', label='Back', primary=True)])
                             ])
-    q.user.deployments_df = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
+    q.user.deployments = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
     await q.page.save()
 
 
@@ -95,10 +101,11 @@ async def show_deployment_details(q: Q):
     if q.args.mlops_deployments_table:
         q.app.selected_table_index = q.args.mlops_deployments_table[0]
     deployment_index = int(q.app.selected_table_index)
-    q.user.deployment_id = q.user.deployments_df['id'][deployment_index]
-    q.user.experiment_id = q.user.deployments_df['experiment_id'][deployment_index]
-    q.user.project_id = q.user.deployments_df['project_id'][deployment_index]
-    #deployment_state = q.user.deployments_df['state'][deployment_index]
+    q.user.deployment_id = q.user.deployments[deployment_index].id
+    q.user.experiment_id = q.user.deployments[deployment_index].experiment_id
+    q.user.project_id = q.user.deployments[deployment_index].project_id
+
+    #deployment_state = q.user.deployments['state'][deployment_index]
     endpoint_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/score'
     sample_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/sample_request'
 

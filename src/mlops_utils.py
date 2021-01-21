@@ -7,6 +7,47 @@ import requests
 from .utils import *
 import json
 
+
+# Table from MLOps deployment
+def table_from_deployments(deployments, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+    # Columns for the table
+    columns = [ui.table_column(
+        name=str(x),
+        label=str(x),
+        sortable=sortable,  # Make column sortable
+        filterable=filterable,  # Make column filterable
+        searchable=searchable  # Make column searchable
+    ) for x in ['id', 'experiment_id','project_id', 'created_time']]
+    rows = [ui.table_row(name=str(i), cells=[d.id, d.project_id, d.experiment_id, str(d.created_time)]) for i, d in enumerate(deployments)]
+    table = ui.table(name=f'{table_name}',
+             rows=rows,
+             columns=columns,
+             multiple=False,  # Allow multiple row selection
+             groupable=groupable,
+             height=height)
+    return table
+
+
+# Table from MLOps projects
+def table_from_projects(projects, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+    # Columns for the table
+    columns = [ui.table_column(
+        name=str(x),
+        label=str(x),
+        sortable=sortable,  # Make column sortable
+        filterable=filterable,  # Make column filterable
+        searchable=searchable  # Make column searchable
+    ) for x in ['id', 'display_name','description', 'created_time']]
+    rows = [ui.table_row(name=str(i), cells=[p.id, p.display_name, p.description, str(p.created_time)]) for i, p in enumerate(projects)]
+    table = ui.table(name=f'{table_name}',
+             rows=rows,
+             columns=columns,
+             multiple=False,  # Allow multiple row selection
+             groupable=groupable,
+             height=height)
+    return table
+
+
 # Shows table of DAI experiments
 def show_dai_experiments(q: Q, card_name, card_box):
     driverless = q.user.dai_client
@@ -31,45 +72,23 @@ def show_dai_experiments(q: Q, card_name, card_box):
 # Show list of projects in MLOps
 def mlops_list_projects(q: Q, mlops_client:mlops.Client, card_name, card_box):
     projects = mlops_client.storage.project.list_projects(mlops.StorageListProjectsRequest()).project
-    created_time = []
-    desc = []
-    names = []
-    ids = []
-    for project in projects:
-        ids.append(project.id)
-        names.append(project.display_name)
-        desc.append(project.description)
-        created_time.append(project.created_time)
-
-    projects_df = pd.DataFrame({'id': ids, 'display_name': names, 'description': desc, 'created_time': created_time})
-    mlops_proj_table = table_from_df(projects_df, 'mlops_projects_table', filterable=True, searchable=True, groupable=True)
+    mlops_proj_table = table_from_projects(projects, 'mlops_projects_table', filterable=True, searchable=True, groupable=True)
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('MLOPs Projects'),
         mlops_proj_table
     ])
-    return projects_df
+    return projects
 
 
 # Show list of deployments for a given project in MLOps
 def mlops_list_deployments(q: Q, mlops_client: mlops.Client, project_id, card_name, card_box):
     deployments = mlops_client.storage.deployment.list_deployments(mlops.StorageListDeploymentsRequest(project_id=project_id)).deployment
-    created_time = []
-    experiments = []
-    projects = []
-    ids = []
-    for deployment in deployments:
-        print (f'TK! deployment iter {deployment}')
-        ids.append(deployment.id)
-        projects.append(deployment.project_id)
-        experiments.append(deployment.experiment_id)
-        created_time.append(deployment.created_time)
-    deployments_df = pd.DataFrame({'id': ids, 'experiment_id': experiments, 'project_id': projects, 'created_time': created_time})
-    mlops_deployment_table = table_from_df(deployments_df, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
+    mlops_deployment_table = table_from_deployments(deployments, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('Deployments'),
         mlops_deployment_table
     ])
-    return deployments_df
+    return deployments
 
 
 # Deploy an experiment in MLOps
@@ -108,17 +127,11 @@ def mlops_deploy_experiment(
 
 # Check status of deployment
 # TODO This is current broken and under investigation. Thread on slack: https://h2oai.slack.com/archives/C013PAVE2CS/p1611171200155400
-def mlops_check_deployment_status(mlops_client, deployment_id):
-    """
-
-    :param mlops_client:
-    :param project_id:
-    :return:
+def mlops_check_deployment_status(mlops_client, project_id):
     statuses: mlops.DeployListDeploymentStatusesResponse
-    statuses = mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
-    #statuses = mlops_client.deployer.deployment_status.list_deployment_statuses(
-    #    mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
-    #)
+    statuses = mlops_client.deployer.deployment_status.list_deployment_statuses(
+        mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
+    )
     """
     svc = mlops_client.deployer.deployment_status
     status: mlops.DeployDeploymentStatus
@@ -127,6 +140,8 @@ def mlops_check_deployment_status(mlops_client, deployment_id):
         ).deployment_status
 
     return status.state
+    """
+    return statuses.deployment_status
 
 
 # Wait for deployment to be a specific status
