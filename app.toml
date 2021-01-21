@@ -1,6 +1,6 @@
 [App]
 Name = "mlops-test"
-Version = "0.1.0"
+Version = "0.1.1"
 Title = "MLOps Demo"
 Description = "Steam/DAI and MLOps Demo"
 Category = "Other"

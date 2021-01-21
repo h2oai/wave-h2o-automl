@@ -33,19 +33,21 @@ async def init_app(q: Q, warning: str=''):
     init_mlops_client(q)
     q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
                                       icon=app_config.icon, icon_color=app_config.icon_color)
-    """q.page['navmenu'] = ui.toolbar_card(
+    q.page['navmenu'] = ui.toolbar_card(
         box=app_config.navbar_box,
-        items=[ui.command(name="#mlops", label="Steam", caption="Steam", icon="OfflineStorageSolid"),
-               ui.command(name="#steam", label="MLOps", caption="MLOps", icon="OfflineStorageSolid")
+        items=[ui.command(name="#home", label="Home", caption="Home", icon="Home"),
+               ui.command(name="#steam", label="Steam", caption="Steam", icon="ConnectVirtualMachine"),
+               #ui.command(name="#dai", label="DAI", caption="DAI", icon="BullseyeTarget"),
+               ui.command(name="#mlops", label="MLOps", caption="MLOps", icon="OfflineStorageSolid")
                ]
     )
-    """
+
     q.page['main'] = ui.form_card(
         box=app_config.main_box,
         items=[
             ui.text(f'User: {q.auth.username}'),
             ui.message_bar('warning', warning),
-            ui.textbox(name='dai_address', label='DAI address', required=True, value='https://steam.wave.h2o.ai/proxy/driverless/5/'),
+            ui.textbox(name='dai_address', label='DAI URL from Steam', required=True, value=q.user.dai_address),
             ui.button(name='next_dai_address', label='Next', primary=True)
         ]
     )
@@ -182,12 +184,25 @@ async def serve(q: Q):
     if hash == 'home':
         await clean_cards(q)
         await init_app(q)
+    elif hash == 'steam':
+        await clean_cards(q)
+        q.page['main'] = ui.frame_card(box=app_config.main_box, title='Steam', path='https://steam.wave.h2o.ai/')
+    elif hash == 'dai':
+        await clean_cards(q)
+        if q.user.dai_address:
+            q.page['main'] = ui.frame_card(box=app_config.main_box, title='DAI', path=q.user.dai_address)
+        else:
+            q.page['main'] = ui.form_card(box=app_config.main_box, items=[ui.text('Please enter DAI credentials in Home menu')])
+    elif hash == 'mlops':
+        await clean_cards(q)
+        q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
+
     # Initialiaze mlops client
     elif not q.app.initialized:
         await init_app(q)
         q.app.initialized = True
     # User clicks on next on DAI selection screen
-    if q.args.next_dai_address:
+    elif q.args.next_dai_address:
         if not q.args.dai_address:
             await init_app(q, 'Please enter DAI address in Steam. eg: https://steam.wave.h2o.ai/proxy/driverless/5/')
             return
