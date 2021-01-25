@@ -12,13 +12,14 @@ from h2osteam.clients import DriverlessClient
 
 def init_steam_client(q: Q):
     h2osteam.login(url='https://steam.wave.h2o.ai/', access_token=lambda: q.auth.access_token)
-
+    
 
 def init_mlops_client(q: Q):
     # Get project list from MLOps Storage via MLOps Gateway + Python Client
     q.user.mlops_client = mlops.Client(
         gateway_url=os.environ['STORAGE_URL'], token_provider=lambda: q.auth.access_token)
     print(f'Auth access token: {q.auth.access_token}')
+
 
 async def init_dai_client(q: Q):
     if q.args.dai_address:
@@ -41,13 +42,12 @@ async def init_app(q: Q, warning: str=''):
                ui.command(name="#mlops", label="MLOps", caption="MLOps", icon="OfflineStorageSolid")
                ]
     )
-
     q.page['main'] = ui.form_card(
         box=app_config.main_box,
         items=[
             ui.text(f'User: {q.auth.username}'),
             ui.message_bar('warning', warning),
-            ui.textbox(name='dai_address', label='DAI URL from Steam', required=True, value=q.user.dai_address),
+            ui.textbox(name='dai_address', label='DAI URL from Steam', placeholder='https://steam.wave.h2o.ai/proxy/driverless/35/', required=True, value=q.user.dai_address),
             ui.button(name='next_dai_address', label='Next', primary=True)
         ]
     )
@@ -72,7 +72,7 @@ async def show_mlops_details(q: Q):
     selected_index = int(q.args.mlops_projects_table[0])
     q.user.project_id = projects[selected_index].id
     q.user.project_name = projects[selected_index].display_name
-    q.page['plot1'] = ui.form_card(box=app_config.plot1_box,
+    q.page['main'] = ui.form_card(box=app_config.plot1_box,
                                   items=[ui.text_xl('MLOPs Project'),
                                          ui.text(f'**MLOPs Project Name:**: {q.user.project_name}'),
                                          ui.text(f'**MLOPs Project Id:**: {q.user.project_id}'),
@@ -80,7 +80,7 @@ async def show_mlops_details(q: Q):
                                              [ui.button(name='next_delete_project', label='Delete Project', primary=True),
                                               ui.button(name='back', label='Back', primary=True)])
                             ])
-    q.user.deployments = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'plot2', app_config.plot2_box)
+    q.user.deployments_df = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'experiments', app_config.plot2_box)
     await q.page.save()
 
 
@@ -102,53 +102,51 @@ async def show_experiment_details(q: Q):
 async def show_deployment_details(q: Q):
     if q.args.mlops_deployments_table:
         q.app.selected_table_index = q.args.mlops_deployments_table[0]
-    deployment_index = int(q.app.selected_table_index)
-    q.user.deployment_id = q.user.deployments[deployment_index].id
-    q.user.experiment_id = q.user.deployments[deployment_index].experiment_id
-    q.user.project_id = q.user.deployments[deployment_index].project_id
+    deployment_index = q.app.selected_table_index
 
-    #deployment_state = q.user.deployments['state'][deployment_index]
-    endpoint_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/score'
-    sample_url = 'https://model.wave.h2o.ai/'+ str(q.user.deployment_id) + '/model/sample_request'
+    q.user.deployment_id = q.user.deployments_df.loc[deployment_index, :]['deployment_id']
+    q.user.experiment_id = q.user.deployments_df.loc[deployment_index, :]['experiment_id']
+    q.user.project_id = q.user.deployments_df.loc[deployment_index, :]['project_id']
+    deployment_state = q.user.deployments_df.loc[deployment_index, :]['state']
+    scorer_url = q.user.deployments_df.loc[deployment_index, :]['scorer']
+    sample_url = q.user.deployments_df.loc[deployment_index, :]['sample_url']
+    grafana_url = q.user.deployments_df.loc[deployment_index, :]['grafana_endpoint']
+
+    widgets = [ui.text_xl('Deployment'),
+               ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
+               ui.text(f'**Deployment Status:** {deployment_state}'),
+               ui.text(f'**Project Id:** {q.user.project_id}'),
+               ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
+               ui.text(f'**Scorer:** {scorer_url}'),
+               ui.link(label='Sample URL', path=sample_url, target='', button=True),
+               ui.link(label='Grafana URL', path=grafana_url, target='', button=True),
+               ]
 
     # Get sample query from sample URL
     if q.args.score_request:
         await show_progress(q, 'main', app_config.main_box, 'Scoring..')
-        response = mlops_get_score(endpoint_url, q.args.score_request)
+        response = mlops_get_score(scorer_url, q.args.score_request)
         if response:
             q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
             score_table = table_from_df(q.user.scores_df, 'scores_table')
         else:
             score_table = ui.text('Scorer not ready. Please retry')
-        q.page['main'] = ui.form_card(box=app_config.main_box,
-                                      items=[ui.text_xl('Deployment'),
-                                             ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
-                                             ui.text(f'**Project Id:** {q.user.project_id}'),
-                                             ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
-                                             ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
-                                             ui.text(f'**Deployment Sample URL:** {sample_url}'),
-                                             ui.textbox(name='score_request', label='Request Query',
-                                                        value=q.args.score_request),
-                                             ui.buttons(
-                                                 [ui.button(name='next_score', label='Score', primary=True),
-                                                  ui.button(name='back', label='Back', primary=True)]),
-                                             ui.text_xl('Predictions'),
-                                             score_table])
+        widgets.extend([ui.textbox(name='score_request', label='Request Query', value=q.args.score_request),
+                        ui.buttons([ui.button(name='next_score', label='Score', primary=True),
+                                    ui.button(name='back', label='Back', primary=True)]),
+                        ui.text_xl('Predictions'),
+                        score_table])
+        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
+
     else:
         await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
         sample_query = mlops_get_sample_request(sample_url)
-        q.page['main'] = ui.form_card(box=app_config.main_box,
-                                      items=[ui.text_xl('Deployment'),
-                                             ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
-                                             ui.text(f'**Project Id:** {q.user.project_id}'),
-                                             ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
-                                             ui.text(f'**Deployment Endpoint:** {endpoint_url}'),
-                                             ui.text(f'**Deployment Sample URL:** {sample_url}'),
-                                             ui.textbox(name='score_request', label='Request Query',
+        widgets.extend([ui.textbox(name='score_request', label='Request Query',
                                                         value=sample_query),
                                              ui.buttons(
                                                  [ui.button(name='next_score', label='Score', primary=True),
                                                   ui.button(name='back', label='Back', primary=True)])])
+        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
 
 
 async def deploy_experiment(q: Q):
@@ -238,6 +236,7 @@ async def serve(q: Q):
         await clean_cards(q)
         await show_deployment_details(q)
     elif q.args.back:
+        await clean_cards(q)
         await init_dai_client(q)
     else:
         await clean_cards(q)

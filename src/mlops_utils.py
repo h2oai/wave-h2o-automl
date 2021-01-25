@@ -9,23 +9,20 @@ import json
 
 
 # Table from MLOps deployment
-def table_from_deployments(deployments, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
-    # Columns for the table
-    columns = [ui.table_column(
-        name=str(x),
-        label=str(x),
-        sortable=sortable,  # Make column sortable
-        filterable=filterable,  # Make column filterable
-        searchable=searchable  # Make column searchable
-    ) for x in ['id', 'experiment_id','project_id', 'created_time']]
-    rows = [ui.table_row(name=str(i), cells=[d.id, d.project_id, d.experiment_id, str(d.created_time)]) for i, d in enumerate(deployments)]
-    table = ui.table(name=f'{table_name}',
-             rows=rows,
-             columns=columns,
-             multiple=False,  # Allow multiple row selection
-             groupable=groupable,
-             height=height)
-    return table
+def table_from_deployments(deployments, status, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+    deployment_dict = {}
+    for ds in status:
+        deployment_dict[ds.deployment_id] = {'deployment_id': ds.deployment_id, 'grafana_endpoint': ds.grafana_endpoint, 'scorer': ds.scorer.score.url,
+                                             'sample_url': ds.scorer.sample_request.url, 'state': ds.state}
+    for d in deployments:
+        deployment_dict[ds.deployment_id]['experiment_id'] = d.experiment_id
+        deployment_dict[ds.deployment_id]['project_id'] = d.project_id
+
+    deployments_df = pd.DataFrame.from_dict(deployment_dict, orient='index')
+
+    table = table_from_df(deployments_df, table_name, sortable=sortable, filterable=filterable,
+                          searchable=searchable,groupable=groupable, height=height)
+    return table, deployments_df
 
 
 # Table from MLOps projects
@@ -83,12 +80,13 @@ def mlops_list_projects(q: Q, mlops_client:mlops.Client, card_name, card_box):
 # Show list of deployments for a given project in MLOps
 def mlops_list_deployments(q: Q, mlops_client: mlops.Client, project_id, card_name, card_box):
     deployments = mlops_client.storage.deployment.list_deployments(mlops.StorageListDeploymentsRequest(project_id=project_id)).deployment
-    mlops_deployment_table = table_from_deployments(deployments, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
+    status = mlops_check_deployment_status(mlops_client, project_id)
+    mlops_deployment_table, deployments_df = table_from_deployments(deployments, status, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('Deployments'),
         mlops_deployment_table
     ])
-    return deployments
+    return deployments_df
 
 
 # Deploy an experiment in MLOps
@@ -258,3 +256,25 @@ def mlops_cleanup(q: Q):
     driverless._backend.delete_project(project_key)
 
 
+# TODO needs testing
+def get_predictions_df(score_url, df: pd.DataFrame):
+    # handle nulls
+    rows = df.where(pd.notnull(df), "")
+
+   # every value needs to be a string
+    vals = rows.values.tolist()
+    for i in range(len(vals)):
+        vals[i] = [str(x) for x in vals[i]]
+
+    # create a string that is in the expected dictionary format
+    dictionary = '{"fields": ' + str(df.columns.tolist()) + ', "rows": ' + str(vals) + '}'
+    dictionary = dictionary.replace("'", '"') #mlops needs double quotes!
+
+   # use the utility function
+    dict_preds = mlops_get_score(score_url, dictionary)
+
+   # turn the returned dict into a dataframe
+    preds = pd.DataFrame(data=dict_preds['score'], columns=dict_preds['fields'])
+
+    # join with original data, assumption is the row order never changes
+    return pd.concat([rows, preds], axis=1)
