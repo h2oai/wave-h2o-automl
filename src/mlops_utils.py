@@ -258,10 +258,12 @@ def mlops_cleanup(q: Q):
 
 # TODO needs testing
 def get_predictions_df(score_url, df: pd.DataFrame):
+    # Replace quotes
+    df.replace(to_replace=r'"|\'', value='', regex=True, inplace=True)
     # handle nulls
     rows = df.where(pd.notnull(df), "")
 
-   # every value needs to be a string
+    # every value needs to be a string
     vals = rows.values.tolist()
     for i in range(len(vals)):
         vals[i] = [str(x) for x in vals[i]]
@@ -270,11 +272,9 @@ def get_predictions_df(score_url, df: pd.DataFrame):
     dictionary = '{"fields": ' + str(df.columns.tolist()) + ', "rows": ' + str(vals) + '}'
     dictionary = dictionary.replace("'", '"') #mlops needs double quotes!
 
-   # use the utility function
+    # use the utility function to get scores
     dict_preds = mlops_get_score(score_url, dictionary)
-
-   # turn the returned dict into a dataframe
+    # turn the returned dict into a dataframe
     preds = pd.DataFrame(data=dict_preds['score'], columns=dict_preds['fields'])
-
     # join with original data, assumption is the row order never changes
     return pd.concat([rows, preds], axis=1)

@@ -108,7 +108,7 @@ async def show_deployment_details(q: Q):
     q.user.experiment_id = q.user.deployments_df.loc[deployment_index, :]['experiment_id']
     q.user.project_id = q.user.deployments_df.loc[deployment_index, :]['project_id']
     deployment_state = q.user.deployments_df.loc[deployment_index, :]['state']
-    scorer_url = q.user.deployments_df.loc[deployment_index, :]['scorer']
+    q.user.scorer_url = q.user.deployments_df.loc[deployment_index, :]['scorer']
     sample_url = q.user.deployments_df.loc[deployment_index, :]['sample_url']
     grafana_url = q.user.deployments_df.loc[deployment_index, :]['grafana_endpoint']
 
@@ -117,7 +117,7 @@ async def show_deployment_details(q: Q):
                ui.text(f'**Deployment Status:** {deployment_state}'),
                ui.text(f'**Project Id:** {q.user.project_id}'),
                ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
-               ui.text(f'**Scorer:** {scorer_url}'),
+               ui.text(f'**Scorer:** {q.user.scorer_url}'),
                ui.link(label='Sample URL', path=sample_url, target='', button=True),
                ui.link(label='Grafana URL', path=grafana_url, target='', button=True),
                ]
@@ -125,7 +125,7 @@ async def show_deployment_details(q: Q):
     # Get sample query from sample URL
     if q.args.score_request:
         await show_progress(q, 'main', app_config.main_box, 'Scoring..')
-        response = mlops_get_score(scorer_url, q.args.score_request)
+        response = mlops_get_score(q.user.scorer_url, q.args.score_request)
         if response:
             q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
             score_table = table_from_df(q.user.scores_df, 'scores_table')
@@ -138,6 +138,15 @@ async def show_deployment_details(q: Q):
                         score_table])
         q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
 
+    elif q.user.scoring_via_df:
+        results_table = table_from_df(q.user.results_df, 'results_table')
+        widgets.extend([results_table,
+                                             ui.buttons(
+                                                 [ui.button(name='next_score', label='Score', primary=True),
+                                                  ui.button(name='back', label='Back', primary=True),
+                                                  ui.button(name='next_score_df', label='Score a Dataframe', primary=True)
+                                                  ])])
+        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
     else:
         await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
         sample_query = mlops_get_sample_request(sample_url)
@@ -145,7 +154,9 @@ async def show_deployment_details(q: Q):
                                                         value=sample_query),
                                              ui.buttons(
                                                  [ui.button(name='next_score', label='Score', primary=True),
-                                                  ui.button(name='back', label='Back', primary=True)])])
+                                                  ui.button(name='back', label='Back', primary=True),
+                                                  ui.button(name='next_score_df', label='Score a Dataframe', primary=True)
+                                                  ])])
         q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
 
 
@@ -174,6 +185,13 @@ async def deploy_experiment(q: Q):
     await q.page.save()
     await q.sleep(2)
     await show_tables(q)
+
+# Menu for importing new datasets
+async def import_menu(q: Q, card_name, card_box):
+    q.page[card_name] = ui.form_card(box=card_box, items=[
+        ui.text_xl('Import Data'),
+        ui.file_upload(name='uploaded_file', label='Upload File', multiple=True),
+    ])
 
 
 @app('/')
@@ -238,7 +256,23 @@ async def serve(q: Q):
     elif q.args.back:
         await clean_cards(q)
         await init_dai_client(q)
+    elif q.args.next_score_df:
+        await clean_cards(q)
+        await import_menu(q, 'main', app_config.main_box)
+        # User uploads a file
+    elif q.args.uploaded_file:
+        uploaded_file_path = q.args.uploaded_file
+        for file in uploaded_file_path:
+            filename = file.split('/')[-1]
+            uploaded_files_dict[filename] = uploaded_file_path
+        local_path = await q.site.download(uploaded_file_path[0], '.')
+        time.sleep(1)
+        scoring_df = pd.read_csv(local_path)
+        q.user.results_df = get_predictions_df(q.user.scorer_url, scoring_df)
+        q.user.scoring_via_df = True
+        await show_deployment_details(q)
     else:
         await clean_cards(q)
+        q.user.scoring_via_df = False
         await init_app(q)
     await q.page.save()
