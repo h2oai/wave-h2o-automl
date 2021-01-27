@@ -3,7 +3,8 @@ import pandas as pd
 
 
 # Table from Pandas dataframe
-def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=False, searchable=False,
+                  groupable=False, downloadable=False, height='90%'):
     # Columns for the table
     columns = [ui.table_column(
         name=str(x),
@@ -19,7 +20,8 @@ def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=
              columns=columns,
              multiple=False,  # Allow multiple row selection
              groupable=groupable,
-             height=height)
+             height=height,
+             downloadable=downloadable)
     return table
 
 

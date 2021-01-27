@@ -256,7 +256,7 @@ def mlops_cleanup(q: Q):
     driverless._backend.delete_project(project_key)
 
 
-# TODO needs testing
+# Use a use defined dataframe for scoring and return a dataframe
 def get_predictions_df(score_url, df: pd.DataFrame):
     # Replace quotes
     df.replace(to_replace=r'"|\'', value='', regex=True, inplace=True)

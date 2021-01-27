@@ -31,7 +31,7 @@ Sample Data: Vessel traffic data can be downloaded from https://marinecadastre.g
             """),
         ]
         self.banner_box = '1 1 -1 1'
-        self.navbar_box = '3 1 -1 1'
+        self.navbar_box = '3 1 3 1'
         self.logo_box = '12 1 -1 1'
         self.main_box = '1 2 -1 -1'
         self.plot11_box = '1 2 5 -1'

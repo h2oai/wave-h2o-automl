@@ -112,52 +112,54 @@ async def show_deployment_details(q: Q):
     sample_url = q.user.deployments_df.loc[deployment_index, :]['sample_url']
     grafana_url = q.user.deployments_df.loc[deployment_index, :]['grafana_endpoint']
 
+    # Score using request
+    if q.args.score_request:
+        request_str = q.args.score_request
+        await show_progress(q, 'main', app_config.main_box, 'Scoring..')
+        response = mlops_get_score(q.user.scorer_url, q.args.score_request)
+        if response:
+            q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
+            score_table = table_from_df(q.user.scores_df, 'scores_table', downloadable=True)
+        else:
+            score_table = ui.text('Scorer not ready. Please retry')
+        r_widgets = [ui.text_xl('Predictions'), score_table]
+    # Score using CSV
+    elif q.user.scoring_via_df:
+        request_str = q.user.sample_query
+        results_table = table_from_df(q.user.results_df, 'results_table',downloadable=True)
+        r_widgets = [ui.text_xl('Predictions'), results_table]
+    # Default
+    else:
+        request_str = q.user.sample_query
+        await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
+        q.user.sample_query = mlops_get_sample_request(sample_url)
+        sample_query_dict = json.loads(q.user.sample_query)
+        q.user.sample_df = pd.DataFrame(data=sample_query_dict['rows'], columns=sample_query_dict['fields'])
+        q.user.sample_df.to_csv('sample_scoring.csv', index=False)
+        q.user.sample_download_path, = await q.site.upload(['sample_scoring.csv'])
+        r_widgets = []
+
     widgets = [ui.text_xl('Deployment'),
                ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
                ui.text(f'**Deployment Status:** {deployment_state}'),
                ui.text(f'**Project Id:** {q.user.project_id}'),
                ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
-               ui.text(f'**Scorer:** {q.user.scorer_url}'),
-               ui.link(label='Sample URL', path=sample_url, target='', button=True),
-               ui.link(label='Grafana URL', path=grafana_url, target='', button=True),
+               #ui.text(f'**Scorer:** "{q.user.scorer_url}"'),
+               ui.inline([
+                   ui.link(label='Sample URL', path=sample_url, target='', button=True),
+                   ui.link(label='Grafana URL', path=grafana_url, target='', button=True)]),
+               ui.button(name='back', label='Back', primary=True),
+               ui.separator('Score a CSV'),
+               ui.text(f'[Download sample CSV to score]({q.user.sample_download_path})'),
+               ui.button(name='next_score_df', label='Score CSV', primary=True),
+               ui.separator('Score a Request'),
+               ui.textbox(name='score_request', label='Request Query', value=request_str),
+               ui.button(name='next_score', label='Score Request', primary=True)
                ]
 
-    # Get sample query from sample URL
-    if q.args.score_request:
-        await show_progress(q, 'main', app_config.main_box, 'Scoring..')
-        response = mlops_get_score(q.user.scorer_url, q.args.score_request)
-        if response:
-            q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
-            score_table = table_from_df(q.user.scores_df, 'scores_table')
-        else:
-            score_table = ui.text('Scorer not ready. Please retry')
-        widgets.extend([ui.textbox(name='score_request', label='Request Query', value=q.args.score_request),
-                        ui.buttons([ui.button(name='next_score', label='Score', primary=True),
-                                    ui.button(name='back', label='Back', primary=True)]),
-                        ui.text_xl('Predictions'),
-                        score_table])
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
+    q.page['main'] = ui.form_card(box=app_config.plot11_box, items=widgets)
+    q.page['projects'] = ui.form_card(box=app_config.plot12_box, items=r_widgets)
 
-    elif q.user.scoring_via_df:
-        results_table = table_from_df(q.user.results_df, 'results_table')
-        widgets.extend([results_table,
-                                             ui.buttons(
-                                                 [ui.button(name='next_score', label='Score', primary=True),
-                                                  ui.button(name='back', label='Back', primary=True),
-                                                  ui.button(name='next_score_df', label='Score a Dataframe', primary=True)
-                                                  ])])
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
-    else:
-        await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
-        sample_query = mlops_get_sample_request(sample_url)
-        widgets.extend([ui.textbox(name='score_request', label='Request Query',
-                                                        value=sample_query),
-                                             ui.buttons(
-                                                 [ui.button(name='next_score', label='Score', primary=True),
-                                                  ui.button(name='back', label='Back', primary=True),
-                                                  ui.button(name='next_score_df', label='Score a Dataframe', primary=True)
-                                                  ])])
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
 
 
 async def deploy_experiment(q: Q):
@@ -251,6 +253,7 @@ async def serve(q: Q):
         await show_deployment_details(q)
     # User scoring a request using a deployment
     elif q.args.next_score:
+        q.user.scoring_via_df = False
         await clean_cards(q)
         await show_deployment_details(q)
     elif q.args.back:
