@@ -1,5 +1,5 @@
 h2o_wave==0.11.0
-driverlessai==1.9.0.4.post2
+driverlessai
 pandas
 requests==2.25.0
 https://s3.amazonaws.com/artifacts.h2o.ai/releases/ai/h2o/mlops/rel-0.40.0/2/mlops_client-0.40.0%2B3417204.rel0.40.0.2-py2.py3-none-any.whl

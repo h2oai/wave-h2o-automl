@@ -21,13 +21,23 @@ def init_mlops_client(q: Q):
     print(f'Auth access token: {q.auth.access_token}')
 
 
+def show_error(q: Q, e):
+    q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+        ui.message_bar('warning', f'Error: {e}'),
+        ui.button(name='next_home', label='Next', primary=True)
+    ])
+
+
 async def init_dai_client(q: Q):
     if q.args.dai_address:
         q.user.dai_address = q.args.dai_address
-    q.user.dai_client = driverlessai.Client(
+    try:
+        q.user.dai_client = driverlessai.Client(
             address=q.user.dai_address,
             token_provider=lambda: q.auth.access_token)
-    await show_tables(q)
+        await show_tables(q)
+    except Exception as e:
+        show_error(q, e)
 
 
 async def init_app(q: Q, warning: str=''):
@@ -80,7 +90,13 @@ async def show_mlops_details(q: Q):
                                              [ui.button(name='next_delete_project', label='Delete Project', primary=True),
                                               ui.button(name='back', label='Back', primary=True)])
                             ])
-    q.user.deployments_df = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'experiments', app_config.plot2_box)
+    status, code = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'experiments', app_config.plot2_box)
+    if status:
+        q.user.deployments_df = code
+    else:
+        show_error(q, 'Model is still being deployed. Please try again in a minute')
+        time.sleep(2)
+        show_tables(q)
     await q.page.save()
 
 
@@ -164,29 +180,43 @@ async def show_deployment_details(q: Q):
 
 async def deploy_experiment(q: Q):
     # Link experiment to project
-    await link_experiment_to_project(q)
-    q.page['main'] = ui.form_card(box=app_config.main_box,
-                                  items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
-                                         ui.progress('Deploying in MLOps')])
+    status, code = await link_experiment_to_project(q)
+    # Deploy experiment if export was a success
+    if status:
+        q.page['main'] = ui.form_card(box=app_config.main_box,
+                                      items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
+                                             ui.progress('Deploying in MLOps'),
+                                             ui.button(name='next_tables', label='Next', primary=True)
+                                             ])
+        # Deploy experiment
+        mlops_client = q.user.mlops_client
+        project_key = q.user.project_key
+        experiment_key = q.user.experiment_key
+        try:
+            deployment = mlops_deploy_experiment(
+                mlops_client=mlops_client,
+                project_id=project_key,
+                experiment_id=experiment_key,
+                type=mlops.StorageDeploymentType.SINGLE_MODEL
+            )
+            q.user.deployment_id = deployment.id
+            q.page['main'].items = [
+                ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
+                ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**'),
+                ui.button(name='next_tables', label='Next', primary=True)
+            ]
+        except Exception as e:
+            q.page['main'].items = [ui.message_bar('warning', f'Error: {e}'),
+                                    ui.button(name='next_tables', label='Next', primary=True)
+                                    ]
+    else:
+        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+            ui.message_bar('warning', f'Error: {code}'),
+            ui.button(name='next_tables', label='Next', primary=True)
+        ])
+        # Delete project now because of the error
+        mlops_delete_project(q, q.user.project_key)
     await q.page.save()
-
-    # Deploy experiment
-    mlops_client = q.user.mlops_client
-    project_key = q.user.project_key
-    experiment_key = q.user.experiment_key
-    deployment = mlops_deploy_experiment(
-        mlops_client=mlops_client,
-        project_id=project_key,
-        experiment_id=experiment_key,
-        type=mlops.StorageDeploymentType.SINGLE_MODEL
-    )
-    q.user.deployment_id = deployment.id
-    q.page['main'].items = [ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
-                            ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**')
-                            ]
-    await q.page.save()
-    await q.sleep(2)
-    await show_tables(q)
 
 # Menu for importing new datasets
 async def import_menu(q: Q, card_name, card_box):
@@ -199,22 +229,18 @@ async def import_menu(q: Q, card_name, card_box):
 @app('/')
 async def serve(q: Q):
     hash = q.args['#']
-    if hash == 'home':
-        await clean_cards(q)
+    await clean_cards(q)
+    if hash == 'home' or q.args.next_home:
         await init_app(q)
     elif hash == 'steam':
-        await clean_cards(q)
         q.page['main'] = ui.frame_card(box=app_config.main_box, title='Steam', path='https://steam.wave.h2o.ai/')
     elif hash == 'dai':
-        await clean_cards(q)
         if q.user.dai_address:
             q.page['main'] = ui.frame_card(box=app_config.main_box, title='DAI', path=q.user.dai_address)
         else:
             q.page['main'] = ui.form_card(box=app_config.main_box, items=[ui.text('Please enter DAI credentials in Home menu')])
     elif hash == 'mlops':
-        await clean_cards(q)
         q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
-
     # Initialiaze mlops client
     elif not q.app.initialized:
         await init_app(q)
@@ -228,16 +254,13 @@ async def serve(q: Q):
         await init_dai_client(q)
     # User clicks on a project in the MLOps table
     elif q.args.mlops_projects_table:
-        await clean_cards(q)
         init_mlops_client(q)
         await show_mlops_details(q)
     # If a user clicks on experiment in DAI table, link to project and then deploy
     elif q.args.dai_experiments_table:
-        await clean_cards(q)
         await show_experiment_details(q)
     # User selects experiment deployment
     elif q.args.next_deploy_experiment:
-        await clean_cards(q)
         await deploy_experiment(q)
     # User deletes a project
     elif q.args.next_delete_project:
@@ -249,18 +272,14 @@ async def serve(q: Q):
         await show_tables(q)
     # User clicks on a row in the deployments table
     elif q.args.mlops_deployments_table:
-        await clean_cards(q)
         await show_deployment_details(q)
     # User scoring a request using a deployment
     elif q.args.next_score:
         q.user.scoring_via_df = False
-        await clean_cards(q)
         await show_deployment_details(q)
     elif q.args.back:
-        await clean_cards(q)
         await init_dai_client(q)
     elif q.args.next_score_df:
-        await clean_cards(q)
         await import_menu(q, 'main', app_config.main_box)
         # User uploads a file
     elif q.args.uploaded_file:
@@ -274,8 +293,9 @@ async def serve(q: Q):
         q.user.results_df = get_predictions_df(q.user.scorer_url, scoring_df)
         q.user.scoring_via_df = True
         await show_deployment_details(q)
+    elif q.args.next_tables:
+        await show_tables(q)
     else:
-        await clean_cards(q)
         q.user.scoring_via_df = False
         await init_app(q)
     await q.page.save()

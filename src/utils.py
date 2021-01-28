@@ -4,7 +4,7 @@ import pandas as pd
 
 # Table from Pandas dataframe
 def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=False, searchable=False,
-                  groupable=False, downloadable=False, height='90%'):
+                  groupable=False, downloadable=False, height='700px'):
     # Columns for the table
     columns = [ui.table_column(
         name=str(x),
@@ -15,13 +15,14 @@ def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=
     ) for x in df.columns.values]
     # Rows for the table
     rows = [ui.table_row(name=str(i), cells=[str(cell) for cell in row]) for i, row in df.iterrows()]
-    table = ui.table(name=f'{table_name}',
-             rows=rows,
-             columns=columns,
-             multiple=False,  # Allow multiple row selection
-             groupable=groupable,
-             height=height,
-             downloadable=downloadable)
+    table = ui.table(
+        name=f'{table_name}',
+        rows=rows,
+        columns=columns,
+        multiple=False,  # Allow multiple row selection
+        groupable=groupable,
+        downloadable=downloadable,
+        height=height)
     return table
 
 

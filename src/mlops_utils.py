@@ -9,7 +9,7 @@ import json
 
 
 # Table from MLOps deployment
-def table_from_deployments(deployments, status, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+def table_from_deployments(deployments, status, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='700px'):
     deployment_dict = {}
     for ds in status:
         deployment_dict[ds.deployment_id] = {'deployment_id': ds.deployment_id, 'grafana_endpoint': ds.grafana_endpoint, 'scorer': ds.scorer.score.url,
@@ -21,12 +21,13 @@ def table_from_deployments(deployments, status, table_name: str, sortable=False,
     deployments_df = pd.DataFrame.from_dict(deployment_dict, orient='index')
 
     table = table_from_df(deployments_df, table_name, sortable=sortable, filterable=filterable,
-                          searchable=searchable,groupable=groupable, height=height)
+                          searchable=searchable, groupable=groupable, height=height)
     return table, deployments_df
 
 
 # Table from MLOps projects
-def table_from_projects(projects, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False, height='90%'):
+def table_from_projects(projects, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False,
+                        height='700px'):
     # Columns for the table
     columns = [ui.table_column(
         name=str(x),
@@ -58,7 +59,8 @@ def show_dai_experiments(q: Q, card_name, card_box):
         experiments_df = pd.DataFrame({'Experiment Key': experiment_keys, 'Experiment Name': experiment_names})
     else:
         experiments_df = pd.DataFrame()
-    data_table = table_from_df(experiments_df, 'dai_experiments_table', filterable=True, searchable=True, groupable=True)
+    data_table = table_from_df(experiments_df, 'dai_experiments_table', filterable=True, searchable=True, groupable=True,
+                               height='700px')
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('DAI Experiments'),
         data_table
@@ -79,14 +81,17 @@ def mlops_list_projects(q: Q, mlops_client:mlops.Client, card_name, card_box):
 
 # Show list of deployments for a given project in MLOps
 def mlops_list_deployments(q: Q, mlops_client: mlops.Client, project_id, card_name, card_box):
-    deployments = mlops_client.storage.deployment.list_deployments(mlops.StorageListDeploymentsRequest(project_id=project_id)).deployment
-    status = mlops_check_deployment_status(mlops_client, project_id)
-    mlops_deployment_table, deployments_df = table_from_deployments(deployments, status, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
-    q.page[card_name] = ui.form_card(box=card_box, items=[
-        ui.text_xl('Deployments'),
-        mlops_deployment_table
-    ])
-    return deployments_df
+    try:
+        deployments = mlops_client.storage.deployment.list_deployments(mlops.StorageListDeploymentsRequest(project_id=project_id)).deployment
+        status = mlops_check_deployment_status(mlops_client, project_id)
+        mlops_deployment_table, deployments_df = table_from_deployments(deployments, status, 'mlops_deployments_table', filterable=True, searchable=True, groupable=True)
+        q.page[card_name] = ui.form_card(box=card_box, items=[
+            ui.text_xl('Deployments'),
+            mlops_deployment_table
+        ])
+    except Exception as e:
+        return False, e
+    return True, deployments_df
 
 
 # Deploy an experiment in MLOps
@@ -124,21 +129,11 @@ def mlops_deploy_experiment(
 
 
 # Check status of deployment
-# TODO This is current broken and under investigation. Thread on slack: https://h2oai.slack.com/archives/C013PAVE2CS/p1611171200155400
 def mlops_check_deployment_status(mlops_client, project_id):
     statuses: mlops.DeployListDeploymentStatusesResponse
     statuses = mlops_client.deployer.deployment_status.list_deployment_statuses(
         mlops.DeployListDeploymentStatusesRequest(project_id=project_id)
     )
-    """
-    svc = mlops_client.deployer.deployment_status
-    status: mlops.DeployDeploymentStatus
-    status = svc.get_deployment_status(
-            mlops.DeployGetDeploymentStatusRequest(deployment_id=deployment_id)
-        ).deployment_status
-
-    return status.state
-    """
     return statuses.deployment_status
 
 
@@ -197,13 +192,17 @@ def mlops_deployment_should_become_healthy(deployment_id, mlops_client):
 async def link_experiment_to_project(q: Q):
     driverless = q.user.dai_client
     # Create project
-    q.user.project_key = driverless._backend.create_project(q.args.project_name, q.args.project_desc)
-    # Link project to experiment
-    driverless._backend.link_experiment_to_project(
-        project_key=q.user.project_key,
-        experiment_key=q.user.experiment_key,
-    )
- 
+    try:
+        q.user.project_key = driverless._backend.create_project(q.args.project_name, q.args.project_desc)
+        # Link project to experiment
+        driverless._backend.link_experiment_to_project(
+            project_key=q.user.project_key,
+            experiment_key=q.user.experiment_key,
+        )
+    except Exception as e:
+        return False, e
+    return True, None
+
 
 # Get a sample request for a deployment
 def mlops_get_sample_request(sample_url):
