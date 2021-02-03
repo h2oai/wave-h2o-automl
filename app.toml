@@ -1,6 +1,6 @@
 [App]
 Name = "mlops-test"
-Version = "0.2.0"
+Version = "0.2.4"
 Title = "Steam & MLOps Demo"
 Description = "Demo of Steam, DAI and MLOps in Wave cloud"
 Category = "Other"
@@ -16,4 +16,9 @@ EnableOIDC = true
 Name = "STORAGE_URL"
 Secret = "h2oai-mlops"
 SecretKey = "gateway"
+
+[[Env]]
+Name = "STEAM_URL"
+Secret = "h2oai-steam"
+SecretKey = "api"
 

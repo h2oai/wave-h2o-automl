@@ -11,11 +11,12 @@ from h2osteam.clients import DriverlessClient
 import concurrent.futures
 import asyncio
 
+
 LOCAL_TEST = False
 if LOCAL_TEST:
     STEAM_URL = 'https://steam.wave.h2o.ai/'
 else:
-    STEAM_URL = 'https://steam.wave.h2o.ai/' #os.environ['STEAM_URL']
+    STEAM_URL = os.environ['STEAM_URL']
 
 
 def init_steam_client(q: Q):
@@ -65,7 +66,9 @@ def steam_selection(q: Q):
 
     # Store user selected instance
     instance_id = instances_df.iloc[selected_id,:]['id']
-    q.user.dai_address = STEAM_URL + f'proxy/driverless/{instance_id}/'
+    q.user.instance_id = instance_id
+    q.user.dai_address = f'https://steam.wave.h2o.ai/proxy/driverless/{instance_id}/'
+    q.user.dai_address_auth = f'https://steam.wave.h2o.ai/oidc-login-start?forward=/proxy/driverless/{q.user.instance_id}/openid/callback'
     instance_name = instances_df.iloc[selected_id,:]['name']
     q.user.instance_name = instance_name
     instance_status = instances_df.iloc[selected_id,:]['status']
@@ -89,7 +92,7 @@ def steam_selection(q: Q):
 def show_error(q: Q, e):
     q.page['main'] = ui.form_card(box=app_config.main_box, items=[
         ui.message_bar('warning', f'Error: {e}'),
-        ui.button(name='next_home', label='Next', primary=True)
+        ui.button(name='next_steam_menu', label='Next', primary=True)
     ])
 
 
@@ -142,7 +145,7 @@ async def create_dai_instance(q: Q):
                                          timeout_s=q.args.instance_timeout
                                          )
         widgets = [ui.message_bar('success', f'Created DAI instance {q.args.instance_name}'),
-                   ui.button(name='next', label='Next', primary=True)
+                   ui.button(name='next_steam_menu', label='Next', primary=True)
                    ]
         q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
         await q.page.save()
@@ -164,40 +167,32 @@ async def init_dai_client(q: Q):
             token_provider=lambda: q.auth.access_token)
         await show_tables(q)
     except Exception as e:
-        show_error(q, e)
+        if not q.user.dai_client:
+            show_error(q, f'No DAI instance found. Please connect via Steam first. {e}')
+        return
+
+def landing_page(q: Q):
+    q.page['main'] = ui.form_card(box=app_config.main_box, items=app_config.items_guide_tab)
 
 
 def init_app(q: Q, warning: str = ''):
+    global_nav = [
+        ui.nav_group('Navigation', items=[
+            ui.nav_item(name='#home', label='Home'),
+            ui.nav_item(name='#steam', label='Steam'),
+            ui.nav_item(name='#dai', label='DAI'),
+            ui.nav_item(name='#mlops', label='MLOPs'),
+        ])]
+
     if LOCAL_TEST:
         init_steam_client(q)
     else:
         init_steam_client(q)
         init_mlops_client(q)
     q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
-                                      icon=app_config.icon, icon_color=app_config.icon_color)
-    q.page['navmenu'] = ui.toolbar_card(
-        box=app_config.navbar_box,
-        items=[ui.command(name="#home", label="Home", caption="Home", icon="Home"),
-               ui.command(name="#steam", label="Steam", caption="Steam", icon="ConnectVirtualMachine"),
-               #ui.command(name="#dai", label="DAI", caption="DAI", icon="BullseyeTarget"),
-               ui.command(name="#mlops", label="MLOps", caption="MLOps", icon="OfflineStorageSolid")
-               ]
-    )
-    steam_menu(q)
-    """
-    q.page['main'] = ui.form_card(
-        box=app_config.main_box,
-        items=[
-            ui.text(f'User: {q.auth.username}'),
-            ui.message_bar('warning', warning),
-            ui.textbox(name='dai_address', label='DAI URL from Steam',
-                       placeholder='https://steam.wave.h2o.ai/proxy/driverless/35/', required=True,
-                       value=q.user.dai_address),
-            ui.button(name='next_dai_address', label='Next', primary=True)
-        ]
-    )
-    await q.page.save()
-    """
+                                      nav=global_nav)
+    landing_page(q)
+
 
 async def show_tables(q: Q):
     await clean_cards(q)
@@ -368,19 +363,22 @@ async def import_menu(q: Q, card_name, card_box):
 async def serve(q: Q):
     hash = q.args['#']
     await clean_cards(q)
-    if hash == 'home' or q.args.next_home:
+    if hash == 'home':
         init_app(q)
-    elif hash == 'steam':
-        q.page['main'] = ui.frame_card(box=app_config.main_box, title='Steam', path='https://steam.wave.h2o.ai/')
-        #steam_menu(q)
+    elif hash == 'steam' or q.args.next_steam_menu:
+        #q.page['main'] = ui.frame_card(box=app_config.main_box, title='Steam', path='https://steam.wave.h2o.ai/')
+        steam_menu(q)
     elif hash == 'dai':
         if q.user.dai_address:
-            q.page['main'] = ui.frame_card(box=app_config.main_box, title='DAI', path=q.user.dai_address)
+            q.page['main'] = ui.frame_card(box=app_config.main_box, title='DAI', path=q.user.dai_address_auth)
         else:
             q.page['main'] = ui.form_card(box=app_config.main_box,
-                                          items=[ui.text('Please enter DAI credentials in Home menu')])
+                                          items=[ui.text('No DAI instance found. Please connect via Steam first.'),
+                                                 ui.button(name='next_steam_menu', label='Next', primary=True)
+                                                 ])
     elif hash == 'mlops':
-        q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
+        #q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
+        await init_dai_client(q)
     elif q.args.next_steam_menu or q.args.refresh_steam_menu:
         steam_menu(q)
     # Initialiaze mlops client

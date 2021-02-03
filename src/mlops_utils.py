@@ -66,7 +66,9 @@ def show_dai_experiments(q: Q, card_name, card_box):
 
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('DAI Experiments'),
-        ui.link(path=q.user.dai_address+'#/datasets', target='', label='Open DAI in a new Window', button=True),
+        #ui.link(path=q.user.dai_address_auth,
+        #        target='', label='Open DAI in a new Window', button=True),
+        ui.button(name='#dai', label='Open DAI', primary=True),
         data_table
     ])
     return experiments_df
