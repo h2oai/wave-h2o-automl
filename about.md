@@ -1,10 +1,10 @@
-**App Goal:** Demo Steam + MLOps in Wave Cloud
+**App Goal:** Demo Steam, DAI & MLOps in Wave Cloud
 
 **Target Audience:** Data Scientists
 
 **Actively Being Maintained:** Yes
 
-**Last Updated:** February 2nd, 2021
+**Last Updated:** February 3rd, 2021
 
 **Comes with Demo Mode (pre-loaded data, models, results, etc.):** No
 
@@ -14,5 +14,5 @@
 
 ### **Features**:
 * **Steam**: Connect to a users Steam profile and manage DAI instances.
-* **DAI Experiments**: Allows a user to export a DAI experiment in Steam to MLOps.
-* **MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.
+* **DAI**: Allows a user to connect to DAI or export experiments to MLOps.
+ **MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.

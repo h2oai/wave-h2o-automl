@@ -23,7 +23,7 @@ class Configuration:
 
 ### **Features**:
 * **Steam**: Connect to a users Steam profile and manage DAI instances.<br>
-* **DAI Experiments**: Allows a user to export a DAI experiment in Steam to MLOps.<br>
+* **DAI**: Allows a user to connect to DAI or export experiments to MLOps.<br>
 * **MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.<br>
             """),
             ui.buttons([ui.button(name='#steam', label='Get Started', primary=True)], justify='center')
