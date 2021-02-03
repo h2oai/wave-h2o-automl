@@ -36,3 +36,10 @@ async def show_progress(q: Q, card_name: str, card_box: str, message: str):
 async def show_success(q: Q, card_name: str, card_box: str, message: str):
     q.page[card_name] = ui.form_card(box=card_box, items=[ui.message_bar('success', message)])
     await q.page.save()
+
+
+def show_error(q: Q, e, box):
+    q.page['main'] = ui.form_card(box=box, items=[
+        ui.message_bar('warning', f'Error: {e}'),
+        ui.button(name='next_steam_menu', label='Next', primary=True)
+    ])

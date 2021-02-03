@@ -5,12 +5,10 @@ import driverlessai
 from .config import *
 from .mlops_utils import *
 from .utils import *
-import requests
-import h2osteam
-from h2osteam.clients import DriverlessClient
+from .steam_utils import *
 import concurrent.futures
 import asyncio
-
+import h2osteam
 
 LOCAL_TEST = False
 if LOCAL_TEST:
@@ -19,140 +17,17 @@ else:
     STEAM_URL = os.environ['STEAM_URL']
 
 
+# Initialize Steam client
 def init_steam_client(q: Q):
     if LOCAL_TEST:
-        token = ''
+        token=''
         h2osteam.login(url=STEAM_URL, username='trushant.kalyanpur@h2o.ai', password=token)
     else:
         h2osteam.login(url=STEAM_URL, username=q.auth.username, access_token=q.auth.access_token,
                        verify_ssl=not STEAM_URL.startswith("http://"))
 
 
-def steam_menu(q: Q, warning: str = ''):
-    instances = h2osteam.api().get_driverless_instances()
-    if instances:
-        instances_df = pd.DataFrame(instances)
-        instances_df = instances_df[['id', 'name', 'status']]
-    else:
-        instances_df = pd.DataFrame(columns=['id', 'name', 'status'])
-    q.user.instances_df = instances_df
-
-    table = table_from_df(instances_df, 'steam_table')
-    q.page['experiments'] = ui.form_card(box=app_config.plot11_box, items=[
-        ui.text_xl('Steam - Existing DAI Instances'),
-        ui.text_m('Select an instance from the rows'),
-        ui.button(name='refresh_steam_menu', label='Refresh', primary=True),
-        table
-    ])
-
-    dai_choices = [ui.choice(i, i) for i in ['1.9.0.4', '1.9.0.6']]
-    q.page['main'] = ui.form_card(box=app_config.plot12_box, items=[
-        ui.text_xl('Steam - New DAI Instance'),
-        ui.dropdown(name='instance_version', label='DAI Version', choices=dai_choices, value='1.9.0.6'),
-        ui.textbox(name='instance_name', label='Instance name', required=True),
-        ui.textbox(name='instance_cpu_count', label="Number of CPU's", value=1),
-        ui.textbox(name='instance_mem', label='MEMORY [GB]', value=4),
-        ui.textbox(name='instance_storage', label='STORAGE [GB]', value=10),
-        ui.textbox(name='instance_idle_time', label='MAXIMUM IDLE TIME [HRS]', value=12),
-        ui.textbox(name='instance_uptime', label='MAXIMUM UPTIME [HRS]', value=8),
-        ui.textbox(name='instance_timeout', label='TIMEOUT [S]', value=600),
-        ui.button(name='next_create_instance', label='Next', primary=True)
-    ])
-
-
-def steam_selection(q: Q):
-    selected_id = int(q.args.steam_table[0])
-    instances_df = q.user.instances_df
-
-    # Store user selected instance
-    instance_id = instances_df.iloc[selected_id,:]['id']
-    q.user.instance_id = instance_id
-    q.user.dai_address = f'https://steam.wave.h2o.ai/proxy/driverless/{instance_id}/'
-    q.user.dai_address_auth = f'https://steam.wave.h2o.ai/oidc-login-start?forward=/proxy/driverless/{q.user.instance_id}/openid/callback'
-    instance_name = instances_df.iloc[selected_id,:]['name']
-    q.user.instance_name = instance_name
-    instance_status = instances_df.iloc[selected_id,:]['status']
-    q.user.instance_status = instance_status
-
-    # Show instance options
-    q.page['main'] = ui.form_card(box=app_config.main_box, items = [
-        ui.text_xl('DAI Instance'),
-        ui.inline([ui.text(f"**Name:** {instance_name}"),
-                   ui.text(f"**Status:** {instance_status}")]
-                   ),
-        ui.button(name='next_connect_instance', label='Connect to Instance', primary=True),
-        ui.buttons([
-            ui.button(name='next_instance_start_stop', label='Start/Stop Instance', primary=False),
-            ui.button(name='next_delete_instance', label='Delete Instance', primary=False),
-            ui.button(name='back', label='Back', primary=False),
-        ])
-    ])
-
-
-def show_error(q: Q, e):
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=[
-        ui.message_bar('warning', f'Error: {e}'),
-        ui.button(name='next_steam_menu', label='Next', primary=True)
-    ])
-
-
-async def trigger_instance(q: Q):
-    instance = DriverlessClient.get_instance(name=q.user.instance_name)
-    if q.user.instance_status == 'stopped':
-        await show_progress(q, 'main', app_config.main_box, f'Starting DAI Instance {q.user.instance_name}. Please wait..')
-        instance.start()
-    else:
-        await show_progress(q, 'main', app_config.main_box, f'Stopping DAI Instance {q.user.instance_name}. Please wait..')
-        instance.stop()
-
-
-async def start_stop_instance(q: Q):
-
-    q.app.future = asyncio.ensure_future(trigger_instance(q))
-    # if q.user.instance_status == 'stopped':
-    #     await show_progress(q, 'main', app_config.main_box, f'Starting DAI Instance {q.user.instance_name}')
-    # else:
-    #     await show_progress(q, 'main', app_config.main_box, f'Stopping DAI Instance {q.user.instance_name}')
-    #with concurrent.futures.ThreadPoolExecutor() as pool:
-    #    await q.exec(pool, trigger_instance, q)
-    await q.sleep(1)
-    q.app.future.cancel()
-    steam_menu(q)
-    await q.page.save()
-
-
-async def terminate_instance(q: Q):
-    await show_progress(q, 'main', app_config.main_box, f'Terminating DAI Instance {q.user.instance_name}. Please wait..')
-    instance = DriverlessClient.get_instance(name=q.user.instance_name)
-    if q.user.instance_status != 'stopped':
-        instance.stop()
-    instance.terminate()
-    steam_menu(q)
-    await q.page.save()
-
-
-async def create_dai_instance(q: Q):
-    try:
-        await show_progress(q, 'main', app_config.main_box, f'Creating DAI instance {q.args.instance_name}')
-        DriverlessClient.launch_instance(name=q.args.instance_name,
-                                         version=q.args.instance_version,
-                                         profile_name="default-driverless-kubernetes",
-                                         gpu_count=0,
-                                         memory_gb=q.args.instance_mem,
-                                         storage_gb=q.args.instance_storage,
-                                         max_idle_h=q.args.instance_idle_time,
-                                         max_uptime_h=q.args.instance_uptime,
-                                         timeout_s=q.args.instance_timeout
-                                         )
-        widgets = [ui.message_bar('success', f'Created DAI instance {q.args.instance_name}'),
-                   ui.button(name='next_steam_menu', label='Next', primary=True)
-                   ]
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=widgets)
-        await q.page.save()
-    except Exception as e:
-        show_error(q, e)
-        await q.page.save()
-
+# Initialize MLOPs client
 def init_mlops_client(q: Q):
     # Get project list from MLOps Storage via MLOps Gateway + Python Client
     q.user.mlops_client = mlops.Client(
@@ -160,6 +35,7 @@ def init_mlops_client(q: Q):
     print(f'Auth access token: {q.auth.access_token}')
 
 
+# Initialize DAI client
 async def init_dai_client(q: Q):
     try:
         q.user.dai_client = driverlessai.Client(
@@ -168,13 +44,16 @@ async def init_dai_client(q: Q):
         await show_tables(q)
     except Exception as e:
         if not q.user.dai_client:
-            show_error(q, f'No DAI instance found. Please connect via Steam first. {e}')
+            show_error(q, f'No DAI instance found. Please connect via Steam first. {e}', app_config.main_box)
         return
 
+
+# Main landing page with description
 def landing_page(q: Q):
     q.page['main'] = ui.form_card(box=app_config.main_box, items=app_config.items_guide_tab)
 
 
+# Initialize app
 def init_app(q: Q, warning: str = ''):
     global_nav = [
         ui.nav_group('Navigation', items=[
@@ -194,6 +73,7 @@ def init_app(q: Q, warning: str = ''):
     landing_page(q)
 
 
+# Show DAI experiments and MLOP's Projects
 async def show_tables(q: Q):
     await clean_cards(q)
     q.user.experiments_df = show_dai_experiments(q, 'experiments', app_config.plot11_box)
@@ -201,12 +81,14 @@ async def show_tables(q: Q):
     await q.page.save()
 
 
+# Clean cards before next route
 async def clean_cards(q: Q):
     cards_to_clean = ['main', 'experiments', 'projects']
     for card in cards_to_clean:
         del q.page[card]
 
 
+# Show MLOPs details
 async def show_mlops_details(q: Q):
     projects = q.user.projects
     selected_index = int(q.args.mlops_projects_table[0])
@@ -226,12 +108,13 @@ async def show_mlops_details(q: Q):
     if status:
         q.user.deployments_df = code
     else:
-        show_error(q, 'Model is still being deployed. Please try again in a minute')
+        show_error(q, 'Model is still being deployed. Please try again in a minute', app_config.main_box)
         time.sleep(2)
         show_tables(q)
     await q.page.save()
 
 
+# Show DAI experiment details
 async def show_experiment_details(q: Q):
     experiment_index = int(q.args.dai_experiments_table[0])
     q.user.experiment_key = q.user.experiments_df['Experiment Key'][experiment_index]
@@ -248,6 +131,7 @@ async def show_experiment_details(q: Q):
                                          ])
 
 
+# Show user selected deployment
 async def show_deployment_details(q: Q):
     if q.args.mlops_deployments_table:
         q.app.selected_table_index = q.args.mlops_deployments_table[0]
@@ -310,6 +194,7 @@ async def show_deployment_details(q: Q):
     q.page['projects'] = ui.form_card(box=app_config.plot12_box, items=r_widgets)
 
 
+# Deploy DAI experiment to MLOPs
 async def deploy_experiment(q: Q):
     # Link experiment to project
     status, code = await link_experiment_to_project(q)
@@ -359,6 +244,7 @@ async def import_menu(q: Q, card_name, card_box):
     ])
 
 
+# Main loop
 @app('/')
 async def serve(q: Q):
     hash = q.args['#']
