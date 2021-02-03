@@ -57,12 +57,16 @@ def show_dai_experiments(q: Q, card_name, card_box):
             experiment_names.append(experiment.name)
             experiment_keys.append(experiment.key)
         experiments_df = pd.DataFrame({'Experiment Key': experiment_keys, 'Experiment Name': experiment_names})
+        data_table = table_from_df(experiments_df, 'dai_experiments_table', filterable=True, searchable=True,
+                                   groupable=True,
+                                   height='700px')
     else:
         experiments_df = pd.DataFrame()
-    data_table = table_from_df(experiments_df, 'dai_experiments_table', filterable=True, searchable=True, groupable=True,
-                               height='700px')
+        data_table = ui.text('No experiments found')
+
     q.page[card_name] = ui.form_card(box=card_box, items=[
         ui.text_xl('DAI Experiments'),
+        ui.link(path=q.user.dai_address+'#/datasets', target='', label='Open DAI in a new Window', button=True),
         data_table
     ])
     return experiments_df
