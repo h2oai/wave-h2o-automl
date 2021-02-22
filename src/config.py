@@ -56,5 +56,6 @@ Synthea: https://synthetichealth.github.io/synthea/
         self.scoring_path = './src/scoring'
         self.logo_file = 'wave_logo.png'
         self.app_icon_file = 'hosp.png'
-
+        self.synthea_output = './src/simulators/synthea_output'
+        
 app_config = Configuration()

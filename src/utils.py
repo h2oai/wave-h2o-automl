@@ -3,7 +3,6 @@ import pandas as pd
 from .config import *
 from subprocess import Popen, PIPE
 
-
 # Table from Pandas dataframe
 def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=False, searchable=False, groupable=False):
     # Columns for the table
@@ -20,8 +19,7 @@ def table_from_df(df: pd.DataFrame, table_name: str, sortable=False, filterable=
              rows=rows,
              columns=columns,
              multiple=False,  # Allow multiple row selection
-             groupable=groupable,
-             height='100%')
+             groupable=groupable)
     return table
 
 

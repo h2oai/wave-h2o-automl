@@ -22,7 +22,7 @@ def assign_setting_vars(q: Q):
     q.app.population_size = assign_col(q.args.population_size, q.app.population_size)
     q.app.age_range = assign_col(q.args.age_range, q.app.age_range)
     q.app.conditions = assign_col(q.args.conditions, q.app.conditions)
-    q.app.dai_license = assign_col(q.args.dai_license, q.app.dai_license)
+    q.app.dai_license = os.environ['DAI_LICENSE']
 
 
 async def settings_menu(q: Q, warning: str=''):
@@ -51,7 +51,7 @@ async def settings_menu(q: Q, warning: str=''):
     # Tabs for settings menu
     tabs = [ui.tab(name='simulation', label='Simulation'),
             ui.tab(name='patient', label='Patient'),
-            ui.tab(name='dai', label='DAI Settings')]
+            ]
 
     patient_conditions =['Allergic-Rhinitis','Allergies','Appendicitis','Asthma', 'Atopy',
                          'Attention-Deficit-Disorder', 'Bronchitis',
@@ -110,9 +110,6 @@ async def settings_menu(q: Q, warning: str=''):
                                                                                value=q.app.settings_tab, items=tabs),
                                                                       ui.text_xl('DAI Settings'),
                                                                       ui.message_bar('warning', warning),
-                                                                      ui.textbox(name='dai_license', label='DAI License',
-                                                                                 password=True, required=True,
-                                                                                 value=q.app.dai_license),
                                                                       ui.button(name='next', label='Next',
                                                                                 primary=True)
                                                                       ])
@@ -134,6 +131,12 @@ async def serve(q: Q):
     #if not q.args.start_sim:
      #   await clean_cards(q)
       #  await settings_menu(q)
+    if not os.path.exists(app_config.scoring_path):
+        os.mkdir(app_config.scoring_path)
+    if not os.path.exists(app_config.synthea_output):
+        os.mkdir(app_config.synthea_output)
+        os.mkdir(app_config.synthea_output+'/csv')
+
     # Logo
     if not q.app.logo_url:
         q.app.logo_url, = await q.site.upload([app_config.logo_file])
@@ -143,15 +146,11 @@ async def serve(q: Q):
          box=app_config.logo_box,
          title='',
          content="""<p style='text-align:center; vertical-align: middle; display: table-cell; width: 134px;'>"""
-                """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.logo_url + """' height='50px' width='50px'> </a> </p>"""
+                """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.logo_url + """' height='40px' width='40px'> </a> </p>"""
 
          )
 
     if q.args.next:
-        if (not q.args.dai_license and not q.app.dai_license):
-            q.app.settings_tab = 'dai'
-            await settings_menu(q, 'Please enter DAI license')
-            return
         assign_setting_vars(q)
         await clean_cards(q)
         await setup_mojo(q)
