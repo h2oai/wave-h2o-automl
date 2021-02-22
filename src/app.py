@@ -318,7 +318,7 @@ async def serve(q: Q):
         await show_deployment_details(q)
     elif q.args.next_tables:
         await show_tables(q)
-    elif q.args.next_create_instance and q.args.instance_name:
+    elif q.args.next_create_instance:
         await create_dai_instance(q)
     elif q.args.steam_table:
         steam_selection(q)

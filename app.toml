@@ -1,6 +1,6 @@
 [App]
 Name = "mlops-test"
-Version = "0.2.5"
+Version = "0.2.6"
 Title = "Steam & MLOps Demo"
 Description = "Demo of Steam, DAI and MLOps in Wave cloud"
 Category = "Other"
