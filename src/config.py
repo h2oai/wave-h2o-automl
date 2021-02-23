@@ -11,31 +11,23 @@ class Configuration:
     Configuration file Data Labeling
     """
     def __init__(self):
-        self.title = 'H2O Steam & MLOps Demo'
-        self.subtitle = 'Demo of Steam DAI and MLOps in Wave'
-        self.default_title = ui.text_xl('MLOps & DAI')
+        self.title = 'Wave Databricks Notebook Generator'
+        self.subtitle = 'Generate a notebook using Wave'
+        self.default_title = ui.text_xl('Wave DB Notebook')
         self.items_guide_tab = [
             ui.text("""
-<center><img width="700" height=240" src="https://i.imgur.com/Jv54JjL.png"></center>"""),
-            ui.frame(content='<h2><center>H2O Steam & MLOPs</center></h2>', height='60px'),
+<center><img width="700" height=240" src="https://i.imgur.com/3FpWucB.png"></center>"""),
+            ui.frame(content='<h2><center>Wave Databricks Notebook Generator</center></h2><br><br><br>'),
             ui.text("""
-**Detailed Description:** This application utilizes the Steam and MLOps connected to Wave cloud to demo MLOPs deployment and management.
-
-### **Features**:
-* **Steam**: Connect to a users Steam profile and manage DAI instances.<br>
-* **DAI**: Allows a user to connect to DAI or export experiments to MLOps.<br>
-* **MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.<br>
+This application allows a user to generate a Databricks notebook based on user defined settings. 
+* Specify custom S3 based datasets for training and testing
+* Specify Driverless AI (DAI) experiment settings
+* Generate a notebook that can be used in the Databricks environment
+* Allows a user to import the notebook to a Databricks workspace directly
             """),
-            ui.buttons([ui.button(name='#steam', label='Get Started', primary=True)], justify='center')
+            ui.buttons([ui.button(name='next_start', label='Get Started', primary=True)], justify='center'),
         ]
-        self.banner_box = '1 1 -1 1'
-        self.navbar_box = '4 1 3 1'
-        self.logo_box = '12 1 -1 1'
-        self.main_box = '1 2 -1 -1'
-        self.plot11_box = '1 2 5 -1'
-        self.plot12_box = '6 2 -1 -1'
-        self.plot1_box = '1 2 -1 3'
-        self.plot2_box = '1 4 -1 -1'
         self.tmp_dir = '/tmp'
+
 
 app_config = Configuration()

@@ -1,24 +1,13 @@
 [App]
-Name = "mlops-test"
-Version = "0.2.6"
-Title = "Steam & MLOps Demo"
-Description = "Demo of Steam, DAI and MLOps in Wave cloud"
-Category = "Other"
+Name = "wave-databricks"
+Version = "0.0.3"
+Title = "Wave Databricks Notebook Generator"
+Description = "Genearate a Databricks Notebook based on user settings"
+Category = "Data Science"
 LongDescription = "about.md"
 
 [Runtime]
 Module = "src.app"
 MemoryLimit = "200Mi"
 MemoryReservation = "100Mi"
-EnableOIDC = true
-
-[[Env]]
-Name = "STORAGE_URL"
-Secret = "h2oai-mlops"
-SecretKey = "gateway"
-
-[[Env]]
-Name = "STEAM_URL"
-Secret = "h2oai-steam"
-SecretKey = "api"
 

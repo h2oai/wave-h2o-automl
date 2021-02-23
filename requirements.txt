@@ -1,7 +1,6 @@
-h2o_wave==0.11.0
-driverlessai
+h2o_wave < 1.0.0
+boto3
+smart_open
 pandas
+ipynb-py-convert
 requests==2.25.0
-https://s3.amazonaws.com/artifacts.h2o.ai/releases/ai/h2o/mlops/rel-0.40.0/2/mlops_client-0.40.0%2B3417204.rel0.40.0.2-py2.py3-none-any.whl
-aiohttp==3.7.3
-https://enterprise-steam.s3.amazonaws.com/release/1.8.0/python/h2osteam-1.8.0-py2.py3-none-any.whl

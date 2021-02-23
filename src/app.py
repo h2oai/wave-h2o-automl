@@ -1,38 +1,13 @@
 import os
-from h2o_wave import site, ui, app, Q, main
-import mlops
-import driverlessai
+from h2o_wave import site, ui, app, Q, main, on, handle_on
 from .config import *
-from .mlops_utils import *
 from .utils import *
-from .steam_utils import *
 import concurrent.futures
 import asyncio
-import h2osteam
-
-LOCAL_TEST = False
-if LOCAL_TEST:
-    STEAM_URL = 'https://steam.wave.h2o.ai/'
-else:
-    STEAM_URL = os.environ['STEAM_URL']
-
-
-# Initialize Steam client
-def init_steam_client(q: Q):
-    if LOCAL_TEST:
-        token=''
-        h2osteam.login(url=STEAM_URL, username='trushant.kalyanpur@h2o.ai', password=token)
-    else:
-        h2osteam.login(url=STEAM_URL, username=q.auth.username, access_token=q.auth.access_token,
-                       verify_ssl=not STEAM_URL.startswith("http://"))
-
-
-# Initialize MLOPs client
-def init_mlops_client(q: Q):
-    # Get project list from MLOps Storage via MLOps Gateway + Python Client
-    q.user.mlops_client = mlops.Client(
-        gateway_url=os.environ['STORAGE_URL'], token_provider=lambda: q.auth.access_token)
-    print(f'Auth access token: {q.auth.access_token}')
+import boto3
+import smart_open
+import re
+import base64
 
 
 # Initialize DAI client
@@ -48,285 +23,323 @@ async def init_dai_client(q: Q):
         return
 
 
-# Main landing page with description
-def landing_page(q: Q):
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=app_config.items_guide_tab)
-
-
 # Initialize app
-def init_app(q: Q, warning: str = ''):
+async def init_app(q: Q):
+    q.app.app_icon, = await q.site.upload(['./static/icon.png'])
     global_nav = [
         ui.nav_group('Navigation', items=[
             ui.nav_item(name='#home', label='Home'),
-            ui.nav_item(name='#steam', label='Steam'),
-            ui.nav_item(name='#dai', label='DAI'),
-            ui.nav_item(name='#mlops', label='MLOPs'),
+            ui.nav_item(name='#import', label='Import Data'),
+            ui.nav_item(name='#dai', label='Build Model'),
+            ui.nav_item(name='#mlflow', label='MLFlow'),
         ])]
 
-    if LOCAL_TEST:
-        init_steam_client(q)
-    else:
-        init_steam_client(q)
-        init_mlops_client(q)
-    q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
-                                      nav=global_nav)
-    landing_page(q)
+    q.page['meta'] = ui.meta_card(box='', layouts=[
+        ui.layout(
+            breakpoint='xs',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='m',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='xl',
+            width='1700px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('footer'),
+            ]
+        )
+    ])
+    # Header for app
+    q.page['header'] = ui.header_card(box='header', title=app_config.title,
+                                      subtitle=app_config.subtitle)  # , nav=global_nav)
+    q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
 
 
-# Show DAI experiments and MLOP's Projects
-async def show_tables(q: Q):
-    await clean_cards(q)
-    q.user.experiments_df = show_dai_experiments(q, 'experiments', app_config.plot11_box)
-    q.user.projects = mlops_list_projects(q, q.user.mlops_client, 'projects', app_config.plot12_box)
-    await q.page.save()
+def main_menu(q: Q):
+    q.page['main'] = ui.form_card(box='body', items=app_config.items_guide_tab)
 
 
 # Clean cards before next route
 async def clean_cards(q: Q):
-    cards_to_clean = ['main', 'experiments', 'projects']
+    cards_to_clean = ['main', 'import', 'stepper', 'projects']
     for card in cards_to_clean:
         del q.page[card]
 
-
-# Show MLOPs details
-async def show_mlops_details(q: Q):
-    projects = q.user.projects
-    selected_index = int(q.args.mlops_projects_table[0])
-    q.user.project_id = projects[selected_index].id
-    q.user.project_name = projects[selected_index].display_name
-    q.page['main'] = ui.form_card(box=app_config.plot1_box,
-                                  items=[ui.text_xl('MLOPs Project'),
-                                         ui.text(f'**MLOPs Project Name:**: {q.user.project_name}'),
-                                         ui.text(f'**MLOPs Project Id:**: {q.user.project_id}'),
-                                         ui.buttons(
-                                             [ui.button(name='next_delete_project', label='Delete Project',
-                                                        primary=True),
-                                              ui.button(name='back', label='Back', primary=True)])
-                                         ])
-    status, code = mlops_list_deployments(q, q.user.mlops_client, q.user.project_id, 'experiments',
-                                          app_config.plot2_box)
-    if status:
-        q.user.deployments_df = code
-    else:
-        show_error(q, 'Model is still being deployed. Please try again in a minute', app_config.main_box)
-        time.sleep(2)
-        show_tables(q)
-    await q.page.save()
+def assign_dai_vars(q: Q):
+    # Store user values
+    if q.args.dai_address:
+        q.user.dai_address = q.args.dai_address
+    if q.args.dai_username:
+        q.user.dai_username = q.args.dai_username
+    if q.args.dai_password:
+        q.user.dai_password = q.args.dai_password
+    if q.args.dai_target:
+        q.user.dai_target = q.args.dai_target
+    if q.args.dai_cols_to_drop:
+        q.user.dai_cols_to_drop = q.args.dai_cols_to_drop
+    if q.args.dai_acc:
+        q.user.dai_acc = q.args.dai_acc
+    if q.args.dai_time:
+        q.user.dai_time = q.args.dai_time
+    if q.args.dai_int:
+        q.user.dai_int = q.args.dai_int
+    if q.args.dai_scorer:
+        q.user.dai_scorer = q.args.dai_scorer
 
 
-# Show DAI experiment details
-async def show_experiment_details(q: Q):
-    experiment_index = int(q.args.dai_experiments_table[0])
-    q.user.experiment_key = q.user.experiments_df['Experiment Key'][experiment_index]
-    q.page['main'] = ui.form_card(box=app_config.main_box,
-                                  items=[ui.text_xl('DAI Experiment'),
-                                         ui.text(f'**Experiment Key:** {q.user.experiment_key}'),
-                                         ui.text(f'**Experiment Name:** {q.user.experiment_name}'),
-                                         ui.textbox(name='project_name', label='Project Name'),
-                                         ui.textbox(name='project_desc', label='Project Description'),
-                                         ui.buttons(
-                                             [ui.button(name='next_deploy_experiment',
-                                                        label='Create Project & Deploy Experiment', primary=True),
-                                              ui.button(name='back', label='Back', primary=True)])
-                                         ])
+def assign_db_vars(q: Q):
+    if q.args.db_uname:
+        q.user.db_uname = q.args.db_uname
+    if q.args.db_instance:
+        q.user.db_instance = q.args.db_instance
+    if q.args.db_key:
+        q.user.db_key = q.args.db_key
+    if q.args.db_notebook:
+        q.user.db_notebook = q.args.db_notebook
 
 
-# Show user selected deployment
-async def show_deployment_details(q: Q):
-    if q.args.mlops_deployments_table:
-        q.app.selected_table_index = q.args.mlops_deployments_table[0]
-    deployment_index = q.app.selected_table_index
+@on('next_start')
+@on('back_dai')
+async def next_start(q: Q):
+      assign_dai_vars(q)
+      q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database'),
+                ui.step(label='Step 2: DAI Settings', icon='Settings'),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')]),
+            ui.text_xl('Import Data from S3'),
+            ui.textbox(name='s3_train_file', label='Train File',
+                       value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_train_cat.csv'),
+            ui.textbox(name='s3_test_file', label='Test File',
+                       value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_test_cat.csv'),
+            ui.button(name='next_dai', label='Next', primary=True)
 
-    q.user.deployment_id = q.user.deployments_df.loc[deployment_index, :]['deployment_id']
-    q.user.experiment_id = q.user.deployments_df.loc[deployment_index, :]['experiment_id']
-    q.user.project_id = q.user.deployments_df.loc[deployment_index, :]['project_id']
-    deployment_state = q.user.deployments_df.loc[deployment_index, :]['state']
-    q.user.scorer_url = q.user.deployments_df.loc[deployment_index, :]['scorer']
-    sample_url = q.user.deployments_df.loc[deployment_index, :]['sample_url']
-    grafana_url = q.user.deployments_df.loc[deployment_index, :]['grafana_endpoint']
-
-    # Score using request
-    if q.args.score_request:
-        request_str = q.args.score_request
-        await show_progress(q, 'main', app_config.main_box, 'Scoring..')
-        response = mlops_get_score(q.user.scorer_url, q.args.score_request)
-        if response:
-            q.user.scores_df = pd.DataFrame(columns=response['fields'], data=response['score'])
-            score_table = table_from_df(q.user.scores_df, 'scores_table', downloadable=True)
-        else:
-            score_table = ui.text('Scorer not ready. Please retry')
-        r_widgets = [ui.text_xl('Predictions'), score_table]
-    # Score using CSV
-    elif q.user.scoring_via_df:
-        request_str = q.user.sample_query
-        results_table = table_from_df(q.user.results_df, 'results_table', downloadable=True)
-        r_widgets = [ui.text_xl('Predictions'), results_table]
-    # Default
-    else:
-        request_str = q.user.sample_query
-        await show_progress(q, 'main', app_config.main_box, 'Checking deployment status..')
-        q.user.sample_query = mlops_get_sample_request(sample_url)
-        sample_query_dict = json.loads(q.user.sample_query)
-        q.user.sample_df = pd.DataFrame(data=sample_query_dict['rows'], columns=sample_query_dict['fields'])
-        q.user.sample_df.to_csv('sample_scoring.csv', index=False)
-        q.user.sample_download_path, = await q.site.upload(['sample_scoring.csv'])
-        r_widgets = []
-
-    widgets = [ui.text_xl('Deployment'),
-               ui.text(f'**Deployment Id:** {q.user.deployment_id}'),
-               ui.text(f'**Deployment Status:** {deployment_state}'),
-               ui.text(f'**Project Id:** {q.user.project_id}'),
-               ui.text(f'**Experiment Id:** {q.user.experiment_id}'),
-               # ui.text(f'**Scorer:** "{q.user.scorer_url}"'),
-               ui.inline([
-                   ui.link(label='Sample URL', path=sample_url, target='', button=True),
-                   ui.link(label='Grafana URL', path=grafana_url, target='', button=True)]),
-               ui.button(name='back', label='Back', primary=True),
-               ui.separator('Score a CSV'),
-               ui.text(f'[Download sample CSV to score]({q.user.sample_download_path})'),
-               ui.button(name='next_score_df', label='Score CSV', primary=True),
-               ui.separator('Score a Request'),
-               ui.textbox(name='score_request', label='Request Query', value=request_str),
-               ui.button(name='next_score', label='Score Request', primary=True)
-               ]
-
-    q.page['main'] = ui.form_card(box=app_config.plot11_box, items=widgets)
-    q.page['projects'] = ui.form_card(box=app_config.plot12_box, items=r_widgets)
+        ]
+    )
 
 
-# Deploy DAI experiment to MLOPs
-async def deploy_experiment(q: Q):
-    # Link experiment to project
-    status, code = await link_experiment_to_project(q)
-    # Deploy experiment if export was a success
-    if status:
-        q.page['main'] = ui.form_card(box=app_config.main_box,
-                                      items=[ui.message_bar('success', f'Imported experiment {q.user.experiment_key}'),
-                                             ui.progress('Deploying in MLOps'),
-                                             ui.button(name='next_tables', label='Next', primary=True)
-                                             ])
-        # Deploy experiment
-        mlops_client = q.user.mlops_client
-        project_key = q.user.project_key
-        experiment_key = q.user.experiment_key
-        try:
-            deployment = mlops_deploy_experiment(
-                mlops_client=mlops_client,
-                project_id=project_key,
-                experiment_id=experiment_key,
-                type=mlops.StorageDeploymentType.SINGLE_MODEL
-            )
-            q.user.deployment_id = deployment.id
-            q.page['main'].items = [
-                ui.message_bar('success', f'Exported experiment {q.user.experiment_key} to storage'),
-                ui.text(f'MLOps Deployment Id: **{q.user.deployment_id}**'),
-                ui.button(name='next_tables', label='Next', primary=True)
-            ]
-        except Exception as e:
-            q.page['main'].items = [ui.message_bar('warning', f'Error: {e}'),
-                                    ui.button(name='next_tables', label='Next', primary=True)
-                                    ]
-    else:
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
-            ui.message_bar('warning', f'Error: {code}'),
-            ui.button(name='next_tables', label='Next', primary=True)
+@on('next_dai')
+@on('back_db')
+async def next_dai(q: Q, warning: str = ''):
+    # Assign Databricks settings if back was pressed
+    assign_db_vars(q)
+    # Store user values from previous inputs
+    if q.args.s3_train_file:
+        q.user.train_filename = q.args.s3_train_file
+    if q.args.s3_train_file:
+        q.user.test_filename = q.args.s3_test_file
+
+    # App defaults
+    if not q.user.dai_acc:
+        q.user.dai_acc = 5
+    if not q.user.dai_time:
+        q.user.dai_time = 3
+    if not q.user.dai_int:
+        q.user.dai_int = 10
+    if not q.user.dai_scorer:
+        q.user.dai_scorer = 'AUC'
+    if not q.user.dai_cols_to_drop:
+        q.user.dai_cols_to_drop = []
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database'),
+                ui.step(label='Step 2: DAI Settings', icon='Settings'),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+            ]),
+            ui.progress('Importing data')
         ])
-        # Delete project now because of the error
-        mlops_delete_project(q, q.user.project_key)
     await q.page.save()
+    q.user.train_df = pd.read_csv(smart_open.smart_open(q.user.train_filename))
+    q.user.test_df = pd.read_csv(smart_open.smart_open(q.user.test_filename))
+
+    target_choices = [ui.choice(i, i) for i in q.user.train_df.columns]
+    scorer_list_classification = ['Accuracy', 'AUC', 'AUCPR', 'F05', 'F1', 'F2', 'GINI', 'LOGLOSS', 'MACROAUC']
+    scorer_list_regression = ['MAE', 'MAPE', 'MER', 'MSE', 'R2', 'R2COD', 'RMSE', 'RMSLE', 'RMSPE', 'SMAPE']
+    scorer_list = scorer_list_classification + scorer_list_regression
+    scorer_choices = [ui.choice(i, i) for i in scorer_list]
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings'),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+            ]),
+            ui.separator('Instance Settings'),
+            ui.message_bar('danger', warning),
+            ui.textbox(name='dai_address', label='DAI Address', required=True, value=q.user.dai_address),
+            ui.textbox(name='dai_username', label='DAI Username', required=True, value=q.user.dai_username),
+            ui.textbox(name='dai_password', label='DAI Password', required=True, password=True,
+                       value=q.user.dai_password),
+            ui.separator('Experiment Settings'),
+            ui.dropdown(name='dai_target', label='DAI Target', required=True, choices=target_choices,
+                        value=q.user.dai_target),
+            ui.dropdown(name='dai_cols_to_drop', label='Columns to Drop', choices=target_choices,
+                        values=q.user.dai_cols_to_drop),
+            ui.slider(name='dai_acc', label='Accuracy', value=q.user.dai_acc, min=1, step=1, max=10),
+            ui.slider(name='dai_time', label='Time', value=q.user.dai_time, min=1, step=1, max=10),
+            ui.slider(name='dai_int', label='Interpretability', value=q.user.dai_int, min=1, step=1, max=10),
+            ui.dropdown(name='dai_scorer', label='Scorer', choices=scorer_choices, value=q.user.dai_scorer),
+            ui.buttons([ui.button(name='next_db', label='Next', primary=True),
+                        ui.button(name='back_dai', label='Back', primary=False)
+                        ])
+        ])
 
 
-# Menu for importing new datasets
-async def import_menu(q: Q, card_name, card_box):
-    q.page[card_name] = ui.form_card(box=card_box, items=[
-        ui.text_xl('Import Data'),
-        ui.file_upload(name='uploaded_file', label='Upload File', multiple=True),
-    ])
+@on()
+async def next_db(q: Q, warning: str = ''):
+    assign_dai_vars(q)
+
+    if not q.args.dai_address or not q.args.dai_username or not q.args.dai_password or not q.args.dai_target:
+        await next_dai(q, 'Enter required information')
+        return
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+            ]),
+            ui.message_bar('danger', warning),
+            ui.textbox(name='db_uname', label='Databricks Username', required=True, value=q.user.db_uname),
+            ui.textbox(name='db_instance', label='Databricks Workspace', required=True,
+                       value=q.user.db_instance),
+            ui.textbox(name='db_key', label='Databricks Personal Access token', required=True, password=True,
+                       value=q.user.db_key),
+            ui.link(label='CLICK HERE to view Instructions for obtaining a Token',
+                    path='https://docs.databricks.com/dev-tools/api/latest/authentication.html', target=''),
+            ui.textbox(name='db_notebook', label='Databricks Notebook Name', required=True, value=q.user.db_notebook),
+            ui.buttons([ui.button(name='next_done', label='Next', primary=True),
+                        ui.button(name='back_db', label='Back', primary=False)
+                        ])
+        ])
+
+
+# Modify the template file with the user defined settings
+def modify_template(replace_dict):
+    fp = open("./src/db_template.ipynb", "r")
+    fp_out = open("./wave_databricks_notebook.ipynb", "w")
+    for line in fp:
+        line_found = False
+        # Replace line if key found
+        for k, v in replace_dict.items():
+            if k in line:
+                # For ints and lists
+                if re.match(r'.*(WAVE_DAI_ACC|WAVE_DAI_TIME|WAVE_DAI_INT|WAVE_DAI_COLS2DROP)', line):
+                    fp_out.write(line.replace(k, str(v)))
+                # Strings
+                else:
+                    fp_out.write(line.replace(k, "'" + v + "'"))
+                line_found = True
+        if not line_found:
+            fp_out.write(line)
+    fp.close()
+    fp_out.close()
+
+
+@on()
+async def next_done(q: Q):
+    # Assign databricks settings
+    assign_db_vars(q)
+    replace_dict = {
+        'WAVE_DAI_ADDRESS': q.user.dai_address,
+        'WAVE_DAI_USERNAME': q.user.dai_username,
+        'WAVE_DAI_PASSWORD': q.user.dai_password,
+        'WAVE_TRAIN_FILE_PATH': q.user.train_filename,
+        'WAVE_TEST_FILE_PATH': q.user.test_filename,
+        'WAVE_DAI_TARGET': q.user.dai_target,
+        'WAVE_DAI_COLS2DROP': q.user.dai_cols_to_drop,
+        'WAVE_DAI_ACC': q.user.dai_acc,
+        'WAVE_DAI_TIME': q.user.dai_time,
+        'WAVE_DAI_INTERPRETABILITY': q.user.dai_int,
+        'WAVE_DAI_SCORER': q.user.dai_scorer,
+    }
+
+    # Modify template with user settings
+    modify_template(replace_dict)
+    # Replace spaces with _
+    if q.user.db_notebook:
+        q.user.db_notebook = q.user.db_notebook.replace(' ', '_')
+    # Zip file for download
+    os.system('zip ./wave_databricks_nb.zip ./wave_databricks_notebook.ipynb')
+    download_path, = await q.site.upload(['./wave_databricks_nb.zip'])
+
+    # Get full file path for import
+    cwd = os.getcwd()
+    filepath = cwd + '/wave_databricks_notebook.ipynb'
+    curl_cmd = f"""
+    curl -H 'Authorization: Bearer {q.user.db_key}' -F path=/Users/{q.user.db_uname}/{q.user.db_notebook} -F content=@{filepath} \
+     -F format=JUPYTER  {q.user.db_instance}/api/2.0/workspace/import
+    """
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+            ]),
+            ui.progress('Sending notebook to Databricks cluster'),
+        ])
+    await q.page.save()
+    # Try pushing to DB cluster
+    try:
+        os.system(curl_cmd)
+        q.page['main'] = ui.form_card(
+            box='body',
+            items=[
+                ui.stepper(name='icon-stepper', items=[
+                    ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                    ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+                ]),
+                ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
+                ui.text(f'[Download processed notebook]({download_path})'),
+                ui.button(name='next_start', label='Generate another notebook', primary=True)
+            ])
+    except Exception as e:
+        q.page['main'] = ui.form_card(
+            box='body',
+            items=[
+                ui.stepper(name='icon-stepper', items=[
+                    ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                    ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+                ]),
+                ui.message_bar('warning', e),
+                ui.message_bar('warning', 'Notebook push to Databricks clustered failed. Please download the notebook and import.'),
+                ui.text(f'[Download processed notebook]({download_path})'),
+                ui.button(name='next_start', label='Generate another notebook', primary=True)
+            ])
 
 
 # Main loop
 @app('/')
 async def serve(q: Q):
-    hash = q.args['#']
     await clean_cards(q)
-    if hash == 'home':
-        init_app(q)
-    elif hash == 'steam' or q.args.next_steam_menu:
-        #q.page['main'] = ui.frame_card(box=app_config.main_box, title='Steam', path='https://steam.wave.h2o.ai/')
-        steam_menu(q)
-    elif hash == 'dai':
-        if q.user.dai_address:
-            q.page['main'] = ui.frame_card(box=app_config.main_box, title='DAI', path=q.user.dai_address_auth)
-        else:
-            q.page['main'] = ui.form_card(box=app_config.main_box,
-                                          items=[ui.text('No DAI instance found. Please connect via Steam first.'),
-                                                 ui.button(name='next_steam_menu', label='Next', primary=True)
-                                                 ])
-    elif hash == 'mlops':
-        #q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
-        await init_dai_client(q)
-    elif q.args.next_steam_menu or q.args.refresh_steam_menu:
-        steam_menu(q)
-    # Initialiaze mlops client
-    elif not q.app.initialized:
-        init_app(q)
+    if not q.app.initialized:
+        await init_app(q)
         q.app.initialized = True
-    # User clicks on next on DAI selection screen
-    elif q.args.next_connect_instance:
-        await show_progress(q, 'main', app_config.main_box, f'Connecting to DAI')
-        await init_dai_client(q)
-    # User clicks on a project in the MLOps table
-    elif q.args.mlops_projects_table:
-        init_mlops_client(q)
-        await show_mlops_details(q)
-    # If a user clicks on experiment in DAI table, link to project and then deploy
-    elif q.args.dai_experiments_table:
-        await show_experiment_details(q)
-    # User selects experiment deployment
-    elif q.args.next_deploy_experiment:
-        await deploy_experiment(q)
-    # User deletes a project
-    elif q.args.next_delete_project:
-        mlops_delete_project(q, q.user.project_id)
-        q.page['main'] = ui.form_card(box=app_config.main_box,
-                                      items=[ui.message_bar('success', f'Deleted project {q.user.project_id}')])
-        await q.page.save()
-        await q.sleep(2)
-        await show_tables(q)
-    # User clicks on a row in the deployments table
-    elif q.args.mlops_deployments_table:
-        await show_deployment_details(q)
-    # User scoring a request using a deployment
-    elif q.args.next_score:
-        q.user.scoring_via_df = False
-        await show_deployment_details(q)
-    elif q.args.back:
-        await init_dai_client(q)
-    elif q.args.next_score_df:
-        await import_menu(q, 'main', app_config.main_box)
-        # User uploads a file
-    elif q.args.uploaded_file:
-        uploaded_file_path = q.args.uploaded_file
-        for file in uploaded_file_path:
-            filename = file.split('/')[-1]
-            uploaded_files_dict[filename] = uploaded_file_path
-        local_path = await q.site.download(uploaded_file_path[0], '.')
-        time.sleep(1)
-        scoring_df = pd.read_csv(local_path)
-        q.user.results_df = get_predictions_df(q.user.scorer_url, scoring_df)
-        q.user.scoring_via_df = True
-        await show_deployment_details(q)
-    elif q.args.next_tables:
-        await show_tables(q)
-    elif q.args.next_create_instance:
-        await create_dai_instance(q)
-    elif q.args.steam_table:
-        steam_selection(q)
-    elif q.args.next_instance_start_stop:
-        await start_stop_instance(q)
-    elif q.args.next_delete_instance:
-        await terminate_instance(q)
-    else:
-        q.user.scoring_via_df = False
-        init_app(q)
+
+    if not await handle_on(q):
+        main_menu(q)
     await q.page.save()
