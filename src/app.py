@@ -206,7 +206,7 @@ async def next_dai(q: Q, warning: str = ''):
 
 # Modify the template file with the user defined settings
 def modify_template(replace_dict):
-    fp = open("./src/db_template.ipynb", "r")
+    fp = open("./src/db_template_new.ipynb", "r")
     fp_out = open("./wave_databricks_notebook.ipynb", "w")
     for line in fp:
         line_found = False
@@ -273,7 +273,7 @@ async def next_done(q: Q):
                 ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
                 ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
             ]),
-            ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
+            ui.message_bar('success', 'Notebook generated successfully!'),
             ui.text(f'[Download processed notebook]({download_path})'),
             ui.buttons([
                 ui.button(name='next_start', label='Generate another notebook', primary=True),
