@@ -1,8 +1,8 @@
 [App]
 Name = "wave-databricks"
-Version = "0.0.3"
+Version = "0.0.4"
 Title = "Wave Databricks Notebook Generator"
-Description = "Genearate a Databricks Notebook based on user settings"
+Description = "Generate a Databricks Notebook based on user settings"
 Category = "Data Science"
 LongDescription = "about.md"
 

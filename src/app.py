@@ -9,6 +9,7 @@ import smart_open
 import re
 import base64
 
+LOCAL_TEST = False
 
 # Initialize DAI client
 async def init_dai_client(q: Q):
@@ -133,7 +134,6 @@ async def next_start(q: Q):
 
 
 @on('next_dai')
-@on('back_db')
 async def next_dai(q: Q, warning: str = ''):
     # Assign Databricks settings if back was pressed
     assign_db_vars(q)
@@ -197,41 +197,11 @@ async def next_dai(q: Q, warning: str = ''):
             ui.slider(name='dai_time', label='Time', value=q.user.dai_time, min=1, step=1, max=10),
             ui.slider(name='dai_int', label='Interpretability', value=q.user.dai_int, min=1, step=1, max=10),
             ui.dropdown(name='dai_scorer', label='Scorer', choices=scorer_choices, value=q.user.dai_scorer),
-            ui.buttons([ui.button(name='next_db', label='Next', primary=True),
+            ui.buttons([ui.button(name='next_done', label='Next', primary=True),
                         ui.button(name='back_dai', label='Back', primary=False)
                         ])
         ])
 
-
-@on()
-async def next_db(q: Q, warning: str = ''):
-    assign_dai_vars(q)
-
-    if not q.args.dai_address or not q.args.dai_username or not q.args.dai_password or not q.args.dai_target:
-        await next_dai(q, 'Enter required information')
-        return
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
-            ]),
-            ui.message_bar('danger', warning),
-            ui.textbox(name='db_uname', label='Databricks Username', required=True, value=q.user.db_uname),
-            ui.textbox(name='db_instance', label='Databricks Workspace', required=True,
-                       value=q.user.db_instance),
-            ui.textbox(name='db_key', label='Databricks Personal Access token', required=True, password=True,
-                       value=q.user.db_key),
-            ui.link(label='CLICK HERE to view Instructions for obtaining a Token',
-                    path='https://docs.databricks.com/dev-tools/api/latest/authentication.html', target=''),
-            ui.textbox(name='db_notebook', label='Databricks Notebook Name', required=True, value=q.user.db_notebook),
-            ui.buttons([ui.button(name='next_done', label='Next', primary=True),
-                        ui.button(name='back_db', label='Back', primary=False)
-                        ])
-        ])
 
 
 # Modify the template file with the user defined settings
@@ -258,8 +228,12 @@ def modify_template(replace_dict):
 
 @on()
 async def next_done(q: Q):
-    # Assign databricks settings
-    assign_db_vars(q)
+    assign_dai_vars(q)
+
+    if not q.args.dai_address or not q.args.dai_username or not q.args.dai_password or not q.args.dai_target:
+        await next_dai(q, 'Enter required information')
+        return
+
     replace_dict = {
         'WAVE_DAI_ADDRESS': q.user.dai_address,
         'WAVE_DAI_USERNAME': q.user.dai_username,
@@ -279,13 +253,70 @@ async def next_done(q: Q):
     # Replace spaces with _
     if q.user.db_notebook:
         q.user.db_notebook = q.user.db_notebook.replace(' ', '_')
+
+    cwd = os.getcwd()
+    filepath = cwd + '/wave_databricks_notebook.zip'
+
     # Zip file for download
-    os.system('zip ./wave_databricks_nb.zip ./wave_databricks_notebook.ipynb')
-    download_path, = await q.site.upload(['./wave_databricks_nb.zip'])
+    if LOCAL_TEST:
+        os.system(f'./venv/bin/zip-files -o {filepath} ./wave_databricks_notebook.ipynb')
+    else:
+        os.system(f'zip-files -o {filepath} ./wave_databricks_notebook.ipynb')
+
+    download_path, = await q.site.upload([filepath])
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+            ]),
+            ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
+            ui.text(f'[Download processed notebook]({download_path})'),
+            ui.buttons([
+                ui.button(name='next_start', label='Generate another notebook', primary=True),
+                ui.button(name='next_db', label='Send notebook to Databricks cluster', primary=False)
+                ])
+            ])
+
+
+@on('next_db')
+@on('back_db')
+async def next_db(q: Q, warning: str = ''):
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+            ]),
+            ui.message_bar('danger', warning),
+            ui.textbox(name='db_uname', label='Databricks Username', required=True, value=q.user.db_uname),
+            ui.textbox(name='db_instance', label='Databricks Workspace', required=True,
+                       value=q.user.db_instance),
+            ui.textbox(name='db_key', label='Databricks Personal Access token', required=True, password=True,
+                       value=q.user.db_key),
+            ui.link(label='CLICK HERE to view Instructions for obtaining a Token',
+                    path='https://docs.databricks.com/dev-tools/api/latest/authentication.html', target=''),
+            ui.textbox(name='db_notebook', label='Databricks Notebook Name', required=True, value=q.user.db_notebook),
+            ui.buttons([ui.button(name='next_send_to_cluster', label='Next', primary=True),
+                        ui.button(name='back_db', label='Back', primary=False)
+                        ])
+        ])
+
+
+@on()
+async def next_send_to_cluster(q: Q):
+    assign_db_vars(q)
 
     # Get full file path for import
     cwd = os.getcwd()
     filepath = cwd + '/wave_databricks_notebook.ipynb'
+
     curl_cmd = f"""
     curl -H 'Authorization: Bearer {q.user.db_key}' -F path=/Users/{q.user.db_uname}/{q.user.db_notebook} -F content=@{filepath} \
      -F format=JUPYTER  {q.user.db_instance}/api/2.0/workspace/import
@@ -300,10 +331,12 @@ async def next_done(q: Q):
             ]),
             ui.progress('Sending notebook to Databricks cluster'),
         ])
+
     await q.page.save()
-    # Try pushing to DB cluster
-    try:
-        os.system(curl_cmd)
+    status = os.system(curl_cmd)
+    print(status)
+    # Success status is 0
+    if status == 0:
         q.page['main'] = ui.form_card(
             box='body',
             items=[
@@ -313,10 +346,9 @@ async def next_done(q: Q):
                     ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
                 ]),
                 ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
-                ui.text(f'[Download processed notebook]({download_path})'),
                 ui.button(name='next_start', label='Generate another notebook', primary=True)
             ])
-    except Exception as e:
+    else:
         q.page['main'] = ui.form_card(
             box='body',
             items=[
@@ -325,10 +357,12 @@ async def next_done(q: Q):
                     ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
                     ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
                 ]),
-                ui.message_bar('warning', e),
-                ui.message_bar('warning', 'Notebook push to Databricks clustered failed. Please download the notebook and import.'),
-                ui.text(f'[Download processed notebook]({download_path})'),
-                ui.button(name='next_start', label='Generate another notebook', primary=True)
+                ui.message_bar('warning', 'Failed to push notebook. Please check credentials'),
+                ui.buttons([
+                    ui.button(name='next_start', label='Generate another notebook', primary=True),
+                    ui.button(name='back_db', label='Back', primary=False)
+                    ])
+
             ])
 
 

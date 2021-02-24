@@ -4,3 +4,4 @@ smart_open
 pandas
 ipynb-py-convert
 requests==2.25.0
+zip-files
