@@ -11,22 +11,28 @@ class Configuration:
     Configuration file Data Labeling
     """
     def __init__(self):
-        self.title = 'Wave Databricks Notebook Generator'
-        self.subtitle = 'Generate a notebook using Wave'
-        self.default_title = ui.text_xl('Wave DB Notebook')
+        self.title = 'MOJO to Wave Scorer'
+        self.subtitle = ''
         self.items_guide_tab = [
+            ui.text("""<center><img width="450" height=300" src="https://i.imgur.com/tUlLW7M.png"></center>"""),
+            ui.frame(content='<h2><center>MOJO to Wave Scorer</center></h2>', height='60px'),
             ui.text("""
-<center><img width="700" height=240" src="https://i.imgur.com/3FpWucB.png"></center>"""),
-            ui.frame(content='<h2><center>Wave Databricks Notebook Generator</center></h2><br><br><br>'),
-            ui.text("""
-This application allows a user to generate a Databricks notebook based on user defined settings. 
-* Specify custom S3 based datasets for training and testing
-* Specify Driverless AI (DAI) experiment settings
-* Generate a notebook that can be used in the Databricks environment
-* Allows a user to import the notebook to a Databricks workspace directly
+**Detailed Description:** Use a MOJO generated from Driverless AI to generate a custom scoring application.
+
+### **Features**:
+* Import a DAI MOJO and test csv file.<br>
+* Creates a custom application with user defined settings and dashboards that can be used for scoring.<br>
             """),
             ui.buttons([ui.button(name='next_start', label='Get Started', primary=True)], justify='center'),
         ]
+        self.banner_box = '1 1 -1 1'
+        self.navbar_box = '4 1 3 1'
+        self.logo_box = '12 1 -1 1'
+        self.main_box = '1 2 -1 -1'
+        self.plot11_box = '1 2 5 -1'
+        self.plot12_box = '6 2 -1 -1'
+        self.plot1_box = '1 2 -1 3'
+        self.plot2_box = '1 4 -1 -1'
         self.tmp_dir = '/tmp'
 
 

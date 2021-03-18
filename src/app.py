@@ -4,12 +4,14 @@ from .config import *
 from .utils import *
 import concurrent.futures
 import asyncio
-import boto3
-import smart_open
 import re
 import base64
+from sklearn.metrics import confusion_matrix, average_precision_score, recall_score, \
+    f1_score, roc_auc_score,  precision_recall_curve, auc, roc_curve
+from plotly import io as pio
+import plotly.express as px
+import smart_open
 
-LOCAL_TEST = False
 
 # Initialize DAI client
 async def init_dai_client(q: Q):
@@ -27,12 +29,58 @@ async def init_dai_client(q: Q):
 # Initialize app
 async def init_app(q: Q):
     q.app.app_icon, = await q.site.upload(['./static/icon.png'])
+
+    if q.app.custom_scorer:
+        global_nav = [
+            ui.nav_group('Navigation', items=[
+                ui.nav_item(name='#home', label='Main Menu'),
+                ui.nav_item(name='#import', label='Score a CSV'),
+                ui.nav_item(name='#dashboard', label='Dashboard'),
+            ])]
+    else:
+        global_nav = [ui.nav_group('Navigation', items=[])]
+
+    q.page['meta'] = ui.meta_card(box='', layouts=[
+        ui.layout(
+            breakpoint='xs',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='m',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='xl',
+            width='1700px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('footer'),
+            ]
+        )
+    ])
+    # Header for app
+    q.page['header'] = ui.header_card(box='header', title=app_config.title,
+                                      subtitle=app_config.subtitle , nav=global_nav)
+    q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
+
+
+# Initialize app
+async def init_app_scorer(q: Q):
+    q.app.app_icon, = await q.site.upload(['./static/icon.png'])
     global_nav = [
         ui.nav_group('Navigation', items=[
-            ui.nav_item(name='#home', label='Home'),
-            ui.nav_item(name='#import', label='Import Data'),
-            ui.nav_item(name='#dai', label='Build Model'),
-            ui.nav_item(name='#mlflow', label='MLFlow'),
+            ui.nav_item(name='#home', label='Main Menu'),
+            ui.nav_item(name='#import', label='Score a CSV'),
+            ui.nav_item(name='#dashboard', label='Dashboard'),
         ])]
 
     q.page['meta'] = ui.meta_card(box='', layouts=[
@@ -57,16 +105,306 @@ async def init_app(q: Q):
             width='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('body', direction=ui.ZoneDirection.COLUMN, size='900px'),
+                #ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('main', zones=[
+                    # Main page single card
+                    ui.zone('body'),
+                    # Main page split into cards shown in vertical orientation
+                    ui.zone('body_charts', direction=ui.ZoneDirection.ROW, zones=[
+                        ui.zone('body_cm', size='600px'),
+                        ui.zone('body_table'),
+                    ]),
+                   ui.zone('body_plots', direction=ui.ZoneDirection.ROW, size='600px')
+
+                ]),
                 ui.zone('footer'),
             ]
         )
     ])
     # Header for app
-    q.page['header'] = ui.header_card(box='header', title=app_config.title,
-                                      subtitle=app_config.subtitle)  # , nav=global_nav)
+    q.page['header'] = ui.header_card(box='header', title=q.user.app_name,
+                                      subtitle='', nav=global_nav)
     q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
 
+
+@on('next_start')
+@on('back_start')
+async def next_start(q: Q):
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import MOJO', icon='Database'),
+                ui.step(label='Step 2: Import Files', icon='Settings'),
+                ui.step(label='Step 3: Settings', icon='DietPlanNotebook')]),
+            ui.file_upload(name='uploaded_mojo', label='Upload MOJO', multiple=False)
+        ]
+    )
+
+
+@on('uploaded_mojo')
+@on('back_files')
+async def import_files_settings(q: Q, warning: str = ''):
+    if q.args.uploaded_mojo:
+        q.user.mojo_file_path = q.args.uploaded_mojo[0]
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import MOJO', icon='Database', done=True),
+                ui.step(label='Step 2: Import Files', icon='Settings'),
+                ui.step(label='Step 3: Settings', icon='DietPlanNotebook')]),
+            ui.separator('S3 Data'),
+            ui.message_bar('warning', warning),
+            ui.text_xl('Import Data from S3'),
+            ui.textbox(name='s3_data', label='Test File (S3 URI)',
+                       value=''),
+            ui.buttons([ui.button(name='next_settings', label='Next', primary=True),
+                        ui.button(name='back_start', label='Back', primary=False)]),
+            ui.separator('Local Data'),
+            ui.file_upload(name='uploaded_file', label='Upload File', multiple=True),
+            ])
+    await q.page.save()
+
+
+@on('#import')
+async def score_files_settings(q: Q, warning: str = ''):
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.text_xl('Score a CSV'),
+            ui.message_bar('warning', warning),
+            ui.separator('S3 Data'),
+            ui.text_xl('Import Data from S3'),
+            ui.textbox(name='s3_data', label='Test File (S3 URI)',
+                       value=''),
+            ui.buttons([ui.button(name='next_prepare_scorer', label='Next', primary=True),
+                        ui.button(name='#home', label='Main Menu', primary=False)]),
+            ui.separator('Local Data'),
+            ui.file_upload(name='uploaded_file_score', label='Upload File', multiple=True),
+            ]
+    )
+
+    await q.page.save()
+
+
+@on('next_prepare_scorer')
+@on('uploaded_file_score')
+async def next_prepare_score(q: Q):
+    if q.args.uploaded_file:
+        q.user.test_path = q.args.uploaded_file[0]
+    elif q.args.s3_data:
+        q.user.test_df = pd.read_csv(smart_open.smart_open(q.args.s3_data))
+        q.user.test_path = q.app.tmp_path+'/test.csv'
+        q.user.test_df.to_csv(q.user.test_path)
+    else:
+        await score_files_settings(q, warning='Please select a test file')
+        return
+    score_result = await score_csv(q)
+    if score_result:
+        q.page['main'] = ui.form_card(box='body', items=[
+            ui.text_xl(f'Score a CSV'),
+            ui.message_bar('success', f'File scored!'),
+            ui.button(name='#dashboard', label='View Dashboard', primary=True)
+        ])
+
+
+@on('uploaded_file')
+@on('next_settings')
+async def next_settings(q: Q, warning: str = ''):
+    if q.args.uploaded_file:
+        q.user.test_path = q.args.uploaded_file[0]
+        # Download test data
+        q.user.test_path = await q.site.download(q.user.test_path, q.app.tmp_path)
+        q.user.test_df = pd.read_csv(q.user.test_path)
+    elif q.args.s3_data:
+        q.user.test_df = pd.read_csv(smart_open.smart_open(q.args.s3_data))
+        q.user.test_path = q.app.tmp_path+'/test.csv'
+        q.user.test_df.to_csv(q.user.test_path)
+    else:
+        await import_files_settings(q, 'Please select a test file')
+        return
+
+    #columns = list(q.user.test_df)
+    #column_choices = [ui.choice(i, i) for i in columns]
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import MOJO', icon='Database', done=True),
+                ui.step(label='Step 2: Import Files', icon='Settings', done=True),
+                ui.step(label='Step 3: Settings', icon='DietPlanNotebook')]),
+            ui.message_bar('danger', warning),
+            #ui.dropdown(name='target_column', label='Target Column', choices=column_choices, required=True),
+            ui.textbox(name='app_name', label='App name', required=True),
+            ui.buttons([ui.button(name='next_done', label='Next', primary=True),
+                        ui.button(name='back_files', label='Back', primary=False)
+                        ])
+        ])
+
+
+
+@on()
+async def next_done(q: Q):
+    q.user.app_name = q.args.app_name
+    #q.user.target_column = q.args.target_column
+    mojo_name = q.user.mojo_file_path.split('/')[-1]
+    # Unzip mojo to tmp folder
+    filename = q.user.app_name.replace(' ', '_')
+    q.user.mojo_path = await q.site.download(q.user.mojo_file_path, q.app.tmp_path)
+    os.system(f'unzip -o {q.app.tmp_path}/{mojo_name} -d {q.app.tmp_path}/mojo_{filename}')
+    q.user.mojo_scorer_dir = f'{q.app.tmp_path}/mojo_{filename}/mojo-pipeline'
+
+    # FIXME uncomment before cloud
+    #os.environ["DRIVERLESS_AI_LICENSE_KEY"] = ""
+
+    # Score
+    score_result = await score_csv(q)
+    if score_result:
+        await init_app_scorer(q)
+        q.app.custom_scorer = True
+        await q.page.save()
+
+        q.page['main'] = ui.form_card(box='body', items=[
+            ui.text_xl(f'MOJO to Wave Scorer'),
+            ui.message_bar('success', f'Application {q.user.app_name} created successfully. Use navigation menu on top left.'),
+            ui.button(name='#dashboard', label='View Dashboard', primary=True)
+        ])
+    await q.page.save()
+
+
+@on('')
+async def score_csv(q: Q):
+    cmd = f'java -Xmx5g -cp {q.user.mojo_scorer_dir}/mojo2-runtime.jar ai.h2o.mojos.ExecuteMojo {q.user.mojo_scorer_dir}/pipeline.mojo {q.user.test_path} {q.app.tmp_path}/pred.csv'
+    try:
+        os.system(cmd)
+        q.user.pred_df = pd.read_csv(f'{q.app.tmp_path}/pred.csv')
+        q.user.target_column = list(q.user.pred_df.columns)[0].split('.')[0]
+        q.user.results_df = pd.concat([q.user.test_df, q.user.pred_df], axis=1)
+        return True
+    except Exception as e:
+        q.page['main'] = ui.form_card(box='body', items=[
+            ui.text_xl(f'MOJO to Wave Scorer'),
+            ui.message_bar('error', f'Error: {e}'),
+            ui.text(f'Command run: {cmd}'),
+            ui.button(name='#home', label='Main Menu', primary=True)
+        ])
+        return False
+
+
+def get_auc_curve(y_true, y_pred):
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+
+    fig = px.area(
+        x=fpr, y=tpr,
+        title=f'ROC Curve (AUC={auc(fpr, tpr):.4f})',
+        labels=dict(x='False Positive Rate', y='True Positive Rate'),
+        width=700, height=500
+    )
+    fig.add_shape(
+        type='line', line=dict(dash='dash'),
+        x0=0, x1=1, y0=0, y1=1
+    )
+    config = {
+        'scrollZoom': False,
+        'showLink': False,
+        'displayModeBar': False
+    }
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    fig.update_xaxes(constrain='domain')
+    html = pio.to_html(fig, validate=False, include_plotlyjs='cdn', config=config)
+    return html
+
+
+def get_pr_curve(y_true, y_pred):
+    precision, recall, thresholds = precision_recall_curve(y_true, y_pred)
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+
+    fig = px.area(
+        x=recall, y=precision,
+        title=f'Precision-Recall Curve (AUC={auc(fpr, tpr):.4f})',
+        labels=dict(x='Recall', y='Precision'),
+        width=700, height=500
+    )
+    fig.add_shape(
+        type='line', line=dict(dash='dash'),
+        x0=0, x1=1, y0=1, y1=0
+    )
+    fig.update_yaxes(scaleanchor="x", scaleratio=1)
+    fig.update_xaxes(constrain='domain')
+    config = {
+        'scrollZoom': False,
+        'showLink': False,
+        'displayModeBar': False
+    }
+    html = pio.to_html(fig, validate=False, include_plotlyjs='cdn', config=config)
+    return html
+
+
+@on('#dashboard')
+async def show_dashboard(q: Q):
+
+    # Confusion matrix template. Taken from: https://h2oai.github.io/wave/blog/ml-release-0.3.0
+    template ="""
+## Confusion Matrix
+|              |           |              |
+| :-:          |:-:        |:-:           |
+|              | Actual 1  | Actual 0 |
+| Predicted 1     | **{tp}**  | {fp} (FP)    |
+| Predicted 0 | {fn} (FN) | **{tn}**     |
+"""
+
+    target_column = q.user.target_column
+    y_true = q.user.results_df[target_column].to_list()
+    prediction = q.user.pred_df.values.tolist()
+    # Get a threshold value if available or 0.5 by default
+    threshold = q.args.slider if 'slider' in q.args else 0.5
+
+    y_pred_orig = [p[1] for p in prediction]
+
+    # Compute confusion matrix
+    y_pred = [p[1] < threshold for p in prediction]
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+
+    precision = round(average_precision_score(y_true, y_pred)*100, 2)
+    recall = round(recall_score(y_true, y_pred)*100, 2)
+    f1 = round(f1_score(y_true, y_pred), 2)
+    auc_score = round(roc_auc_score(y_true, y_pred), 2)
+
+    # Handle interaction
+    q.page['cm'] = ui.form_card(box='body_cm', items=[
+        ui.text(template.format(tn=tn, fp=fp, fn=fn, tp=tp)),
+        ui.slider(name='slider', label='Threshold', min=0, max=1, step=0.01, value=q.args.slider, trigger=True),
+        ui.stats(items=[
+            ui.stat(label='Precision', value=f'{precision}%'),
+            ui.stat(label='Recall', value=f'{recall}%'),
+            ui.stat(label='F1 Score', value=f'{f1}'),
+            ui.stat(label='AUC Score', value=f'{auc_score}'),
+        ], justify='between', inset=True),
+    ])
+
+    auc_html = get_auc_curve(y_true, y_pred_orig)
+    q.page['plot1'] = ui.frame_card(box='body_plots', title='', content=auc_html)
+
+    pr_html = get_pr_curve(y_true, y_pred_orig)
+    q.page['plot2'] = ui.frame_card(box='body_plots', title='', content=pr_html)
+
+
+    # Table
+    table = table_from_df(q.user.results_df, 'results_table', searchable=True, downloadable=True, groupable=True, height='400px')
+    q.page['main'] = ui.form_card(
+        box='body_table',
+        items=[
+            ui.text_xl('Predictions Table'),
+            table,
+            ui.buttons([
+                ui.button(name='#home', label='Main Menu', primary=True),
+                #ui.button(name='back_files', label='Back', primary=False)
+            ])
+        ]
+    )
+
+    await q.page.save()
 
 def main_menu(q: Q):
     q.page['main'] = ui.form_card(box='body', items=app_config.items_guide_tab)
@@ -74,396 +412,31 @@ def main_menu(q: Q):
 
 # Clean cards before next route
 async def clean_cards(q: Q):
-    cards_to_clean = ['main', 'import', 'stepper', 'projects']
+    cards_to_clean = ['main', 'cm', 'plot1', 'plot2']
     for card in cards_to_clean:
         del q.page[card]
-
-def assign_dai_vars(q: Q):
-    # Store user values
-    if q.args.dai_address:
-        q.user.dai_address = q.args.dai_address
-    if q.args.dai_username:
-        q.user.dai_username = q.args.dai_username
-    if q.args.dai_password:
-        q.user.dai_password = q.args.dai_password
-    if q.args.dai_target:
-        q.user.dai_target = q.args.dai_target
-    if q.args.dai_cols_to_drop:
-        q.user.dai_cols_to_drop = q.args.dai_cols_to_drop
-    if q.args.dai_acc:
-        q.user.dai_acc = q.args.dai_acc
-    if q.args.dai_time:
-        q.user.dai_time = q.args.dai_time
-    if q.args.dai_int:
-        q.user.dai_int = q.args.dai_int
-    if q.args.dai_scorer:
-        q.user.dai_scorer = q.args.dai_scorer
-
-
-def assign_db_vars(q: Q):
-    if q.args.db_uname:
-        q.user.db_uname = q.args.db_uname
-    if q.args.db_instance:
-        q.user.db_instance = q.args.db_instance
-    if q.args.db_key:
-        q.user.db_key = q.args.db_key
-    if q.args.db_notebook:
-        q.user.db_notebook = q.args.db_notebook
-
-
-@on('next_start')
-@on('back_dai')
-async def next_start(q: Q):
-      assign_dai_vars(q)
-      q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database'),
-                ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget')]),
-            ui.text_xl('Import Data from S3'),
-            ui.textbox(name='s3_train_file', label='Train File',
-                       value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_train_cat.csv'),
-            ui.textbox(name='s3_test_file', label='Test File',
-                       value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_test_cat.csv'),
-            ui.button(name='next_dai', label='Next', primary=True)
-        ]
-    )
-
-
-@on('next_dai')
-async def next_dai(q: Q, warning: str = ''):
-    # Assign Databricks settings if back was pressed
-    assign_db_vars(q)
-    # Store user values from previous inputs
-    if q.args.s3_train_file:
-        q.user.train_filename = q.args.s3_train_file
-    if q.args.s3_train_file:
-        q.user.test_filename = q.args.s3_test_file
-
-    # App defaults
-    if not q.user.dai_acc:
-        q.user.dai_acc = 5
-    if not q.user.dai_time:
-        q.user.dai_time = 3
-    if not q.user.dai_int:
-        q.user.dai_int = 10
-    if not q.user.dai_scorer:
-        q.user.dai_scorer = 'AUC'
-    if not q.user.dai_cols_to_drop:
-        q.user.dai_cols_to_drop = []
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database'),
-                ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.progress('Importing data')
-        ])
-    await q.page.save()
-    q.user.train_df = pd.read_csv(smart_open.smart_open(q.user.train_filename))
-    q.user.test_df = pd.read_csv(smart_open.smart_open(q.user.test_filename))
-
-    target_choices = [ui.choice(i, i) for i in q.user.train_df.columns]
-    scorer_list_classification = ['Accuracy', 'AUC', 'AUCPR', 'F05', 'F1', 'F2', 'GINI', 'LOGLOSS', 'MACROAUC']
-    scorer_list_regression = ['MAE', 'MAPE', 'MER', 'MSE', 'R2', 'R2COD', 'RMSE', 'RMSLE', 'RMSPE', 'SMAPE']
-    scorer_list = scorer_list_classification + scorer_list_regression
-    scorer_choices = [ui.choice(i, i) for i in scorer_list]
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.separator('Instance Settings'),
-            ui.message_bar('danger', warning),
-            ui.textbox(name='dai_address', label='DAI Address', required=True, value=q.user.dai_address),
-            ui.textbox(name='dai_username', label='DAI Username', required=True, value=q.user.dai_username),
-            ui.textbox(name='dai_password', label='DAI Password', required=True, password=True,
-                       value=q.user.dai_password),
-            ui.separator('Experiment Settings'),
-            ui.dropdown(name='dai_target', label='DAI Target', required=True, choices=target_choices,
-                        value=q.user.dai_target),
-            ui.dropdown(name='dai_cols_to_drop', label='Columns to Drop', choices=target_choices,
-                        values=q.user.dai_cols_to_drop),
-            ui.slider(name='dai_acc', label='Accuracy', value=q.user.dai_acc, min=1, step=1, max=10),
-            ui.slider(name='dai_time', label='Time', value=q.user.dai_time, min=1, step=1, max=10),
-            ui.slider(name='dai_int', label='Interpretability', value=q.user.dai_int, min=1, step=1, max=10),
-            ui.dropdown(name='dai_scorer', label='Scorer', choices=scorer_choices, value=q.user.dai_scorer),
-            ui.buttons([ui.button(name='next_done', label='Next', primary=True),
-                        ui.button(name='back_dai', label='Back', primary=False)
-                        ])
-        ])
-
-
-
-# Modify the template file with the user defined settings
-def modify_template(replace_dict):
-    fp = open("./src/db_template_new.ipynb", "r")
-    fp_out = open("./wave_databricks_notebook.ipynb", "w")
-    for line in fp:
-        line_found = False
-        # Replace line if key found
-        for k, v in replace_dict.items():
-            if k in line:
-                # For ints and lists
-                if re.match(r'.*(WAVE_DAI_ACC|WAVE_DAI_TIME|WAVE_DAI_INT|WAVE_DAI_COLS2DROP)', line):
-                    fp_out.write(line.replace(k, str(v)))
-                # Strings
-                else:
-                    fp_out.write(line.replace(k, "'" + v + "'"))
-                line_found = True
-        if not line_found:
-            fp_out.write(line)
-    fp.close()
-    fp_out.close()
-
-
-@on()
-async def next_done(q: Q):
-    assign_dai_vars(q)
-
-    if not q.args.dai_address or not q.args.dai_username or not q.args.dai_password or not q.args.dai_target:
-        await next_dai(q, 'Enter required information')
-        return
-
-    replace_dict = {
-        'WAVE_DAI_ADDRESS': q.user.dai_address,
-        'WAVE_DAI_USERNAME': q.user.dai_username,
-        'WAVE_DAI_PASSWORD': q.user.dai_password,
-        'WAVE_TRAIN_FILE_PATH': q.user.train_filename,
-        'WAVE_TEST_FILE_PATH': q.user.test_filename,
-        'WAVE_DAI_TARGET': q.user.dai_target,
-        'WAVE_DAI_COLS2DROP': q.user.dai_cols_to_drop,
-        'WAVE_DAI_ACC': q.user.dai_acc,
-        'WAVE_DAI_TIME': q.user.dai_time,
-        'WAVE_DAI_INTERPRETABILITY': q.user.dai_int,
-        'WAVE_DAI_SCORER': q.user.dai_scorer,
-    }
-
-    # Modify template with user settings
-    modify_template(replace_dict)
-    # Replace spaces with _
-    if q.user.db_notebook:
-        q.user.db_notebook = q.user.db_notebook.replace(' ', '_')
-
-    cwd = os.getcwd()
-    filepath = cwd + '/wave_databricks_notebook.zip'
-
-    # Zip file for download
-    if LOCAL_TEST:
-        os.system(f'./venv/bin/zip-files -o {filepath} ./wave_databricks_notebook.ipynb')
-    else:
-        os.system(f'zip-files -o {filepath} ./wave_databricks_notebook.ipynb')
-
-    download_path, = await q.site.upload([filepath])
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.message_bar('success', 'Notebook generated successfully!'),
-            ui.text(f'[Download processed notebook]({download_path})'),
-            ui.buttons([
-                ui.button(name='next_view_model_menu', label='View Model', primary=True),
-                ui.button(name='next_db', label='Send notebook to Databricks cluster', primary=False),
-                ui.button(name='next_start', label='Generate another notebook', primary=False),
-            ])
-            ])
-
-
-@on('next_db')
-@on('back_db')
-async def next_db(q: Q, warning: str = ''):
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.message_bar('danger', warning),
-            ui.textbox(name='db_uname', label='Databricks Username', required=True, value=q.user.db_uname),
-            ui.textbox(name='db_instance', label='Databricks Workspace', required=True,
-                       value=q.user.db_instance),
-            ui.textbox(name='db_key', label='Databricks Personal Access token', required=True, password=True,
-                       value=q.user.db_key),
-            ui.link(label='CLICK HERE to view Instructions for obtaining a Token',
-                    path='https://docs.databricks.com/dev-tools/api/latest/authentication.html', target=''),
-            ui.textbox(name='db_notebook', label='Databricks Notebook Name', required=True, value=q.user.db_notebook),
-            ui.buttons([ui.button(name='next_send_to_cluster', label='Next', primary=True),
-                        ui.button(name='back_db', label='Back', primary=False)
-                        ])
-        ])
-
-
-@on()
-async def next_send_to_cluster(q: Q):
-    assign_db_vars(q)
-
-    # Get full file path for import
-    cwd = os.getcwd()
-    filepath = cwd + '/wave_databricks_notebook.ipynb'
-
-    curl_cmd = f"""
-    curl -H 'Authorization: Bearer {q.user.db_key}' -F path=/Users/{q.user.db_uname}/{q.user.db_notebook} -F content=@{filepath} \
-     -F format=JUPYTER  {q.user.db_instance}/api/2.0/workspace/import
-    """
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.progress('Sending notebook to Databricks cluster'),
-        ])
-
-    await q.page.save()
-    status = os.system(curl_cmd)
-    print(status)
-    # Success status is 0
-    if status == 0:
-        q.page['main'] = ui.form_card(
-            box='body',
-            items=[
-                ui.stepper(name='icon-stepper', items=[
-                    ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                    ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                    ui.step(label='Step 4: View Model', icon='ModelingView'),
-                    ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-                ]),
-                ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
-                ui.buttons([
-                    ui.button(name='next_view_model_menu', label='View Model', primary=True),
-                    ui.button(name='next_start', label='Generate another notebook', primary=False)
-                ])
-            ])
-
-    else:
-        q.page['main'] = ui.form_card(
-            box='body',
-            items=[
-                ui.stepper(name='icon-stepper', items=[
-                    ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                    ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                    ui.step(label='Step 4: View Model', icon='ModelingView'),
-                    ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-                ]),
-                ui.message_bar('warning', 'Failed to push notebook. Please check credentials'),
-                ui.buttons([
-                    ui.button(name='next_start', label='Generate another notebook', primary=True),
-                    ui.button(name='back_db', label='Back', primary=False)
-                    ])
-
-            ])
-
-
-@on('next_view_model_menu')
-@on('back_view_model_menu')
-async def next_view_model_menu(q: Q, warning: str = ''):
-    if not q.user.mlflow_url:
-        q.user.mlflow_url = 'https://adb-1638020913839231.11.azuredatabricks.net/?o=1638020913839231#mlflow/experiments/1272602360004101'
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.message_bar('danger', warning),
-            ui.textbox(name='mlflow_url', label='MLFlow URL', required=True, value=q.user.mlflow_url),
-            ui.buttons([ui.button(name='next_view_model', label='View Model', primary=True),
-                        ui.button(name='next_start', label='Generate another notebook', primary=False),
-                        ])
-        ])
-
-
-@on()
-async def next_view_model(q: Q, warning: str = ''):
-    del q.page['mlflow']
-    if q.args.mlflow_url:
-        q.user.mlflow_url = q.args.mlflow_url
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                ui.step(label='Step 4: View Model', icon='ModelingView'),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.buttons([ui.button(name='next_score_menu', label='Score', primary=True),
-                        ui.button(name='back_view_model_menu', label='Back', primary=False),
-                        ])
-        ])
-    q.page['mlflow'] = ui.frame_card(box='body', title='MLFlow', path=q.user.mlflow_url)
-
-
-@on()
-async def next_score_menu(q: Q, warning: str = ''):
-    del q.page['mlflow']
-    score_choices = [ui.choice(i, i) for i in ['MLFlow', 'External Scorer']]
-
-    q.page['main'] = ui.form_card(
-        box='body',
-        items=[
-            ui.stepper(name='icon-stepper', items=[
-                ui.step(label='Step 1: Import Data', icon='Database', done=True),
-                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
-                ui.step(label='Step 4: View Model', icon='ModelingView', done=True),
-                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
-            ]),
-            ui.message_bar('danger', warning),
-            ui.dropdown(name='scorer_choice', label='Scorer Choice', required=True, choices=score_choices, value='MLFlow'),
-            ui.buttons([ui.button(name='next_score', label='Score', primary=True),
-                        ui.button(name='next_start', label='Generate another notebook', primary=False),
-                        ])
-        ])
-
 
 
 # Main loop
 @app('/')
 async def serve(q: Q):
-    await clean_cards(q)
-    if not q.app.initialized:
-        await init_app(q)
-        q.app.initialized = True
+    cur_dir = os.getcwd()
+    q.app.tmp_path = cur_dir + app_config.tmp_dir
+    if not os.path.exists(q.app.tmp_path):
+        os.mkdir(q.app.tmp_path)
 
-    if not await handle_on(q):
+    await clean_cards(q)
+
+    hash = q.args['#']
+
+    # Init meta data based on state
+    if q.app.custom_scorer and hash != 'home':
+        await init_app_scorer(q)
+    else:
+        await init_app(q)
+
+    if q.args.slider and not hash:
+        await show_dashboard(q)
+    elif not await handle_on(q):
         main_menu(q)
     await q.page.save()

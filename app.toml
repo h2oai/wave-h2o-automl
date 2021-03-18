@@ -1,13 +1,18 @@
 [App]
-Name = "wave-databricks"
-Version = "0.0.6"
-Title = "Wave Databricks Notebook Generator"
-Description = "Generate a Databricks Notebook based on user settings"
+Name = "wave-scorer"
+Version = "0.0.2"
+Title = "MOJO to Wave Scorer"
+Description = "Creates a Wave scoring app from a MOJO"
 Category = "Data Science"
 LongDescription = "about.md"
 
 [Runtime]
 Module = "src.app"
-MemoryLimit = "200Mi"
-MemoryReservation = "100Mi"
+MemoryLimit = "500Mi"
+MemoryReservation = "250Mi"
+
+[[Env]]
+Name = "DRIVERLESS_AI_LICENSE_KEY"
+Secret = "dai-license"
+SecretKey = "license.sig"
 

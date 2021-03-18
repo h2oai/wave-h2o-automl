@@ -43,4 +43,3 @@ def show_error(q: Q, e, box):
         ui.message_bar('warning', f'Error: {e}'),
         ui.button(name='next_steam_menu', label='Next', primary=True)
     ])
-
