@@ -57,7 +57,7 @@ async def init_app(q: Q):
             width='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('body', direction=ui.ZoneDirection.ROW, size='900px'),
+                ui.zone('body', direction=ui.ZoneDirection.COLUMN, size='900px'),
                 ui.zone('footer'),
             ]
         )
@@ -121,14 +121,15 @@ async def next_start(q: Q):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database'),
                 ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')]),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget')]),
             ui.text_xl('Import Data from S3'),
             ui.textbox(name='s3_train_file', label='Train File',
                        value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_train_cat.csv'),
             ui.textbox(name='s3_test_file', label='Test File',
                        value='s3://h2o-public-test-data/smalldata/kaggle/CreditCard/creditcard_test_cat.csv'),
             ui.button(name='next_dai', label='Next', primary=True)
-
         ]
     )
 
@@ -161,7 +162,9 @@ async def next_dai(q: Q, warning: str = ''):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database'),
                 ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
             ]),
             ui.progress('Importing data')
         ])
@@ -180,7 +183,9 @@ async def next_dai(q: Q, warning: str = ''):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database', done=True),
                 ui.step(label='Step 2: DAI Settings', icon='Settings'),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
             ]),
             ui.separator('Instance Settings'),
             ui.message_bar('danger', warning),
@@ -271,14 +276,17 @@ async def next_done(q: Q):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database', done=True),
                 ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
             ]),
             ui.message_bar('success', 'Notebook generated successfully!'),
             ui.text(f'[Download processed notebook]({download_path})'),
             ui.buttons([
-                ui.button(name='next_start', label='Generate another notebook', primary=True),
-                ui.button(name='next_db', label='Send notebook to Databricks cluster', primary=False)
-                ])
+                ui.button(name='next_view_model_menu', label='View Model', primary=True),
+                ui.button(name='next_db', label='Send notebook to Databricks cluster', primary=False),
+                ui.button(name='next_start', label='Generate another notebook', primary=False),
+            ])
             ])
 
 
@@ -292,7 +300,9 @@ async def next_db(q: Q, warning: str = ''):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database', done=True),
                 ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
             ]),
             ui.message_bar('danger', warning),
             ui.textbox(name='db_uname', label='Databricks Username', required=True, value=q.user.db_uname),
@@ -327,7 +337,9 @@ async def next_send_to_cluster(q: Q):
             ui.stepper(name='icon-stepper', items=[
                 ui.step(label='Step 1: Import Data', icon='Database', done=True),
                 ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook')
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook'),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
             ]),
             ui.progress('Sending notebook to Databricks cluster'),
         ])
@@ -343,11 +355,17 @@ async def next_send_to_cluster(q: Q):
                 ui.stepper(name='icon-stepper', items=[
                     ui.step(label='Step 1: Import Data', icon='Database', done=True),
                     ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                    ui.step(label='Step 4: View Model', icon='ModelingView'),
+                    ui.step(label='Step 5: Score', icon='BullseyeTarget'),
                 ]),
                 ui.message_bar('success', 'Notebook pushed to Databricks cluster successfully!'),
-                ui.button(name='next_start', label='Generate another notebook', primary=True)
+                ui.buttons([
+                    ui.button(name='next_view_model_menu', label='View Model', primary=True),
+                    ui.button(name='next_start', label='Generate another notebook', primary=False)
+                ])
             ])
+
     else:
         q.page['main'] = ui.form_card(
             box='body',
@@ -355,7 +373,9 @@ async def next_send_to_cluster(q: Q):
                 ui.stepper(name='icon-stepper', items=[
                     ui.step(label='Step 1: Import Data', icon='Database', done=True),
                     ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
-                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True)
+                    ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                    ui.step(label='Step 4: View Model', icon='ModelingView'),
+                    ui.step(label='Step 5: Score', icon='BullseyeTarget'),
                 ]),
                 ui.message_bar('warning', 'Failed to push notebook. Please check credentials'),
                 ui.buttons([
@@ -364,6 +384,76 @@ async def next_send_to_cluster(q: Q):
                     ])
 
             ])
+
+
+@on('next_view_model_menu')
+@on('back_view_model_menu')
+async def next_view_model_menu(q: Q, warning: str = ''):
+    if not q.user.mlflow_url:
+        q.user.mlflow_url = 'https://adb-1638020913839231.11.azuredatabricks.net/?o=1638020913839231#mlflow/experiments/1272602360004101'
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
+            ]),
+            ui.message_bar('danger', warning),
+            ui.textbox(name='mlflow_url', label='MLFlow URL', required=True, value=q.user.mlflow_url),
+            ui.buttons([ui.button(name='next_view_model', label='View Model', primary=True),
+                        ui.button(name='next_start', label='Generate another notebook', primary=False),
+                        ])
+        ])
+
+
+@on()
+async def next_view_model(q: Q, warning: str = ''):
+    del q.page['mlflow']
+    if q.args.mlflow_url:
+        q.user.mlflow_url = q.args.mlflow_url
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                ui.step(label='Step 4: View Model', icon='ModelingView'),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
+            ]),
+            ui.buttons([ui.button(name='next_score_menu', label='Score', primary=True),
+                        ui.button(name='back_view_model_menu', label='Back', primary=False),
+                        ])
+        ])
+    q.page['mlflow'] = ui.frame_card(box='body', title='MLFlow', path=q.user.mlflow_url)
+
+
+@on()
+async def next_score_menu(q: Q, warning: str = ''):
+    del q.page['mlflow']
+    score_choices = [ui.choice(i, i) for i in ['MLFlow', 'External Scorer']]
+
+    q.page['main'] = ui.form_card(
+        box='body',
+        items=[
+            ui.stepper(name='icon-stepper', items=[
+                ui.step(label='Step 1: Import Data', icon='Database', done=True),
+                ui.step(label='Step 2: DAI Settings', icon='Settings', done=True),
+                ui.step(label='Step 3: Export Notebook', icon='DietPlanNotebook', done=True),
+                ui.step(label='Step 4: View Model', icon='ModelingView', done=True),
+                ui.step(label='Step 5: Score', icon='BullseyeTarget'),
+            ]),
+            ui.message_bar('danger', warning),
+            ui.dropdown(name='scorer_choice', label='Scorer Choice', required=True, choices=score_choices, value='MLFlow'),
+            ui.buttons([ui.button(name='next_score', label='Score', primary=True),
+                        ui.button(name='next_start', label='Generate another notebook', primary=False),
+                        ])
+        ])
+
 
 
 # Main loop
