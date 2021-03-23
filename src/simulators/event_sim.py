@@ -7,7 +7,7 @@ from .synthea_config import *
 from .synthea_utils import *
 pd.options.mode.chained_assignment = None
 
-test_mode = 0
+test_mode = 1
 
 # Global variables
 class GlobalVars:
@@ -91,8 +91,8 @@ async def show_charts(q: Q):
                 data=data('time beds', rows=rows),
                 plot=ui.plot([ui.mark(type='line', x='=time', y='=beds', x_min=0, y_min=0-GlobalVars.bed_capacity, y_max=GlobalVars.bed_capacity+50,
                                       x_title='Time', y_title='Hospital Bed Availability', color='#F39C12'),
-                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', color=''),
-                              ui.mark(y=0, label='Min Capacity', color='')]
+                              ui.mark(y=GlobalVars.bed_capacity, label='Max Capacity', ref_stroke_color='#F39C12'),
+                              ui.mark(y=0, label='Min Capacity', ref_stroke_color='#F39C12')]
                              ))
 
         # Histogram of age
