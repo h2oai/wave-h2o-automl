@@ -1,169 +1,147 @@
 import os
-from h2o_wave import site, ui, app, Q, main
+from h2o_wave import site, ui, app, Q, main, on, handle_on
 from .config import *
-from .simulators.event_sim import *
-import asyncio
+from .utils import *
+from .steam_utils import *
 import concurrent.futures
+import asyncio
+import h2osteam
+import h2o
+
+LOCAL_TEST = True
+if LOCAL_TEST:
+    STEAM_URL = 'https://steam.wave.h2o.ai/'
+    # Get this token from steam on cloud
+    username = ''
+    token = ''
+    h2osteam.login(url=STEAM_URL, username=username, password=token)
+else:
+    STEAM_URL = os.environ['STEAM_URL']
+    h2osteam.login(url=STEAM_URL, username=q.auth.username, access_token=q.auth.access_token,
+                   verify_ssl=not STEAM_URL.startswith("http://"))
 
 
-# Assign app to variable
-def assign_col(arg_col, store_col):
-    if arg_col:
-        store_col = arg_col
-    return store_col
+# Initialize app
+def init_app(q: Q):
+    global_nav = [
+        ui.nav_group('Navigation', items=[
+            ui.nav_item(name='#home', label='Home'),
+            ui.nav_item(name='#steam', label='Steam'),
+        ])]
 
+    q.page['meta'] = ui.meta_card(box='', layouts=[
+        ui.layout(
+            breakpoint='xs',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW, zones=[ui.zone('header_title', size='30%'),
+                                                                         ui.zone('header_nav', size='70%')]),
+                ui.zone('body', direction=ui.ZoneDirection.COLUMN, zones=[
+                    ui.zone('body_menu', size='400px'),
+                    ui.zone('main', zones=[
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('body_charts', direction=ui.ZoneDirection.COLUMN),
+                        # Main page split into 2 columns, with right column have have vertical orientation
+                        ui.zone('body_table_text_wc', direction=ui.ZoneDirection.COLUMN, size='400px'),
+                        ui.zone('body_table_charts', size='500px')
 
-def assign_setting_vars(q: Q):
-    q.app.settings_tab = assign_col(q.args.settings_tab, q.app.settings_tab)
-    q.app.bed_capacity = assign_col(q.args.bed_capacity, q.app.bed_capacity)
-    q.app.simulation_time = assign_col(q.args.simulation_time, q.app.simulation_time)
-    q.app.arrival_interval = assign_col(q.args.arrival_interval, q.app.arrival_interval)
-    q.app.incoming_population_size = assign_col(q.args.incoming_population_size, q.app.incoming_population_size)
-    q.app.population_size = assign_col(q.args.population_size, q.app.population_size)
-    q.app.age_range = assign_col(q.args.age_range, q.app.age_range)
-    q.app.conditions = assign_col(q.args.conditions, q.app.conditions)
-    q.app.dai_license = os.environ['DAI_LICENSE']
-
-
-async def settings_menu(q: Q, warning: str=''):
-    if not q.app.settings_tab:
-        q.app.settings_tab = 'simulation'
-
-    assign_setting_vars(q)
-
-    if not q.app.age_range:
-        q.app.age_range = [18, 80]
-    if not q.app.conditions:
-        q.app.conditions = ['Injuries']
-    if not q.app.arrival_interval:
-        q.app.arrival_interval = [1, 4]
-    if not q.app.bed_capacity:
-        q.app.bed_capacity = 100
-    if not q.app.simulation_time:
-        q.app.simulation_time = 20
-    if not q.app.population_size:
-        q.app.population_size = 50
-
-    # Header for app
-    q.page['header'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
-                                      icon=app_config.icon, icon_color=app_config.icon_color)
-
-    # Tabs for settings menu
-    tabs = [ui.tab(name='simulation', label='Simulation'),
-            ui.tab(name='patient', label='Patient'),
+                    ])
+                ]),
+                ui.zone('footer'),
             ]
+        ),
+        ui.layout(
+            breakpoint='m',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW, zones=[ui.zone('header_title', size='30%'),
+                                                                         ui.zone('header_nav', size='70%')]),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('body_menu', size='400px'),
+                    ui.zone('main', zones=[
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('body_charts', direction=ui.ZoneDirection.COLUMN),
+                        # Main page split into 2 columns, with right column have have vertical orientation
+                        ui.zone('body_table_text_wc', direction=ui.ZoneDirection.COLUMN, size='400px'),
+                        ui.zone('body_table_charts', size='500px')
 
-    patient_conditions =['Allergic-Rhinitis','Allergies','Appendicitis','Asthma', 'Atopy',
-                         'Attention-Deficit-Disorder', 'Bronchitis',
-                         'Colorectal-Cancer' ,'Contraceptives', 'Contraceptive-Maintenance', 'Copd',
-                         'Dementia', 'Dermatitis' , 'Ear-Infections', 'Epilepsy' , 'Female-Reproduction',
-                         'Fibromyalgia', 'Food-Allergies' ,'Gout', 'Homelessness', 'Injuries',
-                         'Lung-Cancer','Lupus','Med-Rec', 'Metabolic-Syndrome-Care', 'Metabolic-Syndrome-Disease',
-                         'Opioid-Addiction', 'Osteoarthritis', 'Osteoporosis', 'Pregnancy', 'Rheumatoid-Arthritis',
-                         'Self-Harm' ,'Sexual-Activity', 'Sinusitis', 'Sore-Throat', 'Total-Joint-Replacement',
-                         'Urinary-Tract-Infections','Wellness-Encounters']
+                    ])
+                ]),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='xl',
+            width='1700px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        # Main page single card
+                        ui.zone('body_main', direction=ui.ZoneDirection.ROW),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('body_charts', direction=ui.ZoneDirection.COLUMN),
+                        # Main page split into 2 columns, with right column have have vertical orientation
+                        ui.zone('body_table', direction=ui.ZoneDirection.COLUMN, zones=[
+                            ui.zone('body_table_text_wc', direction=ui.ZoneDirection.ROW, size='400px'),
+                            ui.zone('body_table_charts', size='500px')
+                        ]),
+                    ])
+                ]),
+                ui.zone('footer'),
+            ]
+        )
+    ])
+    # Header for app
+    q.page['header'] = ui.header_card(box='header', title=app_config.title, subtitle=app_config.subtitle, nav=global_nav)
+    q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
 
-    condition_choices = [ui.choice(i, i) for i in patient_conditions]
 
-    if q.app.settings_tab == 'simulation':
-        q.page['menu'] = ui.form_card(box=app_config.menu_box, items=[ui.tabs(name='settings_tab',
-                                                                               value=q.app.settings_tab, items=tabs),
-                                                                       ui.text_xl('Simulation Settings'),
-                                                                       ui.slider(name='bed_capacity',
-                                                                                 label='Bed Capacity',
-                                                                                 min=10, max=2000, value=q.app.bed_capacity),
-                                                                       ui.slider(name='simulation_time',
-                                                                                 label='Simulation Time (days)',
-                                                                                 min=10, max=365, value=q.app.simulation_time),
-                                                                       ui.range_slider(name='arrival_interval',
-                                                                                       label='Patient Arrival Interval (days)',
-                                                                                       min=1, max=20,
-                                                                                       min_value=q.app.arrival_interval[0],
-                                                                                       max_value=q.app.arrival_interval[1]),
-                                                                       ui.slider(name='incoming_population_size',
-                                                                                 label='Incoming Population Size (per day)',
-                                                                                 min=1, max=50, value=q.app.incoming_population_size),
-                                                                       ui.slider(name='population_size',
-                                                                                 label='Total Population Size',
-                                                                                 min=2, max=500, value=q.app.population_size),
-                                                                       ui.button(name='next', label='Next',
-                                                                                 primary=True)
-                                                                       ])
-    elif q.app.settings_tab == 'patient':
-        q.page['menu'] = ui.form_card(box=app_config.menu_box, items=[ui.tabs(name='settings_tab',
-                                                                               value=q.app.settings_tab, items=tabs),
-                                                                       ui.text_xl('Patient Settings'),
-                                                                       ui.range_slider(name='age_range',
-                                                                                       label='Age range',
-                                                                                       min=18, max=90,
-                                                                                       min_value=q.app.age_range[0],
-                                                                                       max_value=q.app.age_range[1]),
-                                                                       ui.dropdown(name='conditions',
-                                                                                   label='Condition Modules',
-                                                                                   choices=condition_choices,
-                                                                                   values=q.app.conditions),
-                                                                       ui.button(name='next', label='Next',
-                                                                                 primary=True)
-                                                                       ])
-    elif q.app.settings_tab == 'dai':
-        q.page['menu'] = ui.form_card(box=app_config.menu_box, items=[ui.tabs(name='settings_tab',
-                                                                               value=q.app.settings_tab, items=tabs),
-                                                                      ui.text_xl('DAI Settings'),
-                                                                      ui.message_bar('warning', warning),
-                                                                      ui.button(name='next', label='Next',
-                                                                                primary=True)
-                                                                      ])
+def main_menu(q: Q):
+    q.page['main'] = ui.form_card(box='body_main', items=app_config.items_guide_tab)
 
-    q.page['main'] = ui.form_card(box=app_config.small_main_box, items=app_config.items_guide_tab)
-    await q.page.save()
 
+# Clean cards before next route
 async def clean_cards(q: Q):
-    cards_to_clean = ['menu', 'main', 'plot1', 'plot21', 'plot22', 'button_bar', 'notification',
-                      'plot01', 'plot02', 'plot03', 'plot04', 'plot05', 'plot06', 'plot07', 'plot08']
+    cards_to_clean = ['main', 'steam', 'steam_menu']
     for card in cards_to_clean:
         del q.page[card]
-    await q.page.save()
+
+@on('#home')
+async def home_view(q: Q):
+    main_menu(q)
 
 
+
+@on('next_train')
+async def downstream_task(q: Q):
+    q.user.dai_name = q.args.dai_name
+    q.user.h2o_name = q.args.h2o_name
+
+    # Get DAI client handle
+    instance = DriverlessClient.get_instance(name=q.user.dai_name)
+    q.user.h2oai = instance.connect()
+
+    # Get H2O Client handle
+    #cluster = H2oKubernetesClient.get_cluster(q.user.h2o_name)
+    #h2o.connect(config=cluster.get_connection_config())
+
+    user_dai_instances = q.user.dai_instances_df
+    user_h2o_instances = q.user.h2o_instances_df
+
+    print('Done')
+    
+    
+
+# Main loop
 @app('/')
 async def serve(q: Q):
-    # Initialiaze app
-    #if not q.args.start_sim:
-     #   await clean_cards(q)
-      #  await settings_menu(q)
-    if not os.path.exists(app_config.scoring_path):
-        os.mkdir(app_config.scoring_path)
-    if not os.path.exists(app_config.synthea_output):
-        os.mkdir(app_config.synthea_output)
-        os.mkdir(app_config.synthea_output+'/csv')
-
-    # Logo
-    if not q.app.logo_url:
-        q.app.logo_url, = await q.site.upload([app_config.logo_file])
-        q.app.app_icon_url, = await q.site.upload([app_config.app_icon_file])
-
-    q.page['logo'] = ui.markup_card(
-         box=app_config.logo_box,
-         title='',
-         content="""<p style='text-align:center; vertical-align: middle; display: table-cell; width: 134px;'>"""
-                """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.logo_url + """' height='40px' width='40px'> </a> </p>"""
-
-         )
-
-    if q.args.next:
-        assign_setting_vars(q)
-        await clean_cards(q)
-        await setup_mojo(q)
-        await setup_data(q)
-    elif q.args.start_sim:
-        await clean_cards(q)
-        q.app.future = asyncio.ensure_future(run_loop(q))
-    elif q.args.restart_sim:
-        await clean_cards(q)
-        q.app.stats_plotted = False
-        q.app.limit_reached = False
-        await settings_menu(q)
-    else:
-        await clean_cards(q)
-        await settings_menu(q)
+    init_app(q)
+    # Stores users DAI and H2O instances in q.user.dai_instances_df and q.user.h2o_instances_df
+    get_steam_instances(q)
+    await clean_cards(q)
+    if not await handle_on(q):
+        main_menu(q)
     await q.page.save()

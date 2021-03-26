@@ -1,3 +1,6 @@
 h2o_wave < 1.0.0
 pandas
-simpy
+requests==2.25.0
+driverlessai==1.9.1.1
+h2o==3.32.0.4
+https://enterprise-steam.s3.amazonaws.com/release/1.8.0/python/h2osteam-1.8.0-py2.py3-none-any.whl
