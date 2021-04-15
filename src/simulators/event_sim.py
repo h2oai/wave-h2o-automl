@@ -7,7 +7,7 @@ from .synthea_config import *
 from .synthea_utils import *
 pd.options.mode.chained_assignment = None
 
-test_mode = 1
+test_mode = 0
 
 # Global variables
 class GlobalVars:
