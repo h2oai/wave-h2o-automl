@@ -37,11 +37,4 @@ This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
 Reference: https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
             """),
         ]
-        self.banner_box = '1 1 3 1'
-        self.logo_box = '3 1 1 1'
-        self.navbar_box = '4 1 -1 1'
-        self.main_box = '1 2 -1 -1'
-        self.plot1_box = '1 2 -1 3'
-        self.plot21_box = '1 5 5 -1'
-        self.plot22_box = '6 5 6 -1'
         self.tmp_dir = '/tmp'

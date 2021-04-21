@@ -13,6 +13,82 @@ import io
 h2o.init()
 app_config = Configuration()
 
+# Initialize app
+def init_app(q: Q):
+    global_nav = [
+        ui.nav_group('Navigation', items=[
+            ui.nav_item(name='#home', label='Home'),
+            ui.nav_item(name='#import', label='Import Data'),
+            ui.nav_item(name='#dai', label='Build Model'),
+            ui.nav_item(name='#mlflow', label='MLFlow'),
+        ])]
+
+    q.page['meta'] = ui.meta_card(box='', layouts=[
+        ui.layout(
+            breakpoint='xs',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        ui.zone('menu'),
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                        ])
+                    ]),
+                ]),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='m',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        ui.zone('menu'),
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                        ])
+                    ]),
+                ]),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='xl',
+            width='1700px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        ui.zone('menu'),
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='850px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='850px'),
+                        ])
+                        ]),
+                ]),
+                ui.zone('footer'),
+            ]
+        )
+    ])
+    # Header for app
+    q.page['header'] = ui.header_card(box='header', title=app_config.title, subtitle=app_config.subtitle,
+                                      icon='Settings', icon_color='yellow') #, nav=global_nav)
+    q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
+
+
 @app('/')
 async def serve(q: Q):
     cur_dir = os.getcwd()
@@ -20,6 +96,7 @@ async def serve(q: Q):
     if not os.path.exists(q.app.tmp_dir):
         os.mkdir(q.app.tmp_dir)
 
+    init_app(q)
 
     # Hash routes user when tabs are clicked
     hash = q.args['#']
@@ -56,11 +133,9 @@ async def serve(q: Q):
 
 async def main_menu(q: Q):
     q.app.df_rows = []
-    q.page['banner'] = ui.header_card(box=app_config.banner_box, title=app_config.title, subtitle=app_config.subtitle,
-                                      icon=app_config.icon, icon_color=app_config.icon_color)
 
     q.page['menu'] = ui.toolbar_card(
-        box=app_config.navbar_box,
+        box='menu',
         items=[
             ui.command(name="#guide", label="Home", caption="Home", icon="Home"),
             ui.command(name="#import", label="Import Data", caption="Import Data", icon="Database"),
@@ -81,13 +156,13 @@ async def main_menu(q: Q):
 
     # )
 
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=app_config.items_guide_tab)
+    q.page['main'] = ui.form_card(box='body_main', items=app_config.items_guide_tab)
     await q.page.save()
 
 
 # Menu for importing new datasets
 async def import_menu(q: Q):
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+    q.page['main'] = ui.form_card(box='body_main', items=[
         ui.text_xl('Import Data'),
         ui.file_upload(name='uploaded_file', label='Upload File', multiple=True),
     ])
@@ -99,7 +174,7 @@ async def upload_data(q: Q):
         filename = file.split('/')[-1]
         uploaded_files_dict[filename] = uploaded_file_path
     time.sleep(1)
-    q.page['main'] = ui.form_card(box=app_config.main_box,
+    q.page['main'] = ui.form_card(box='body_main',
                                   items=[ui.message_bar('success', 'File Imported! Please select an action'),
                                          ui.buttons([ui.button(name='#train', label='Train a model', primary=True),
                                                      ui.button(name='#guide', label='Main Menu', primary=False)])])
@@ -111,7 +186,7 @@ async def select_table(q: Q, warning: str = ''):
     if uploaded_files_dict:
         for file in uploaded_files_dict:
             choices.append(ui.choice(file, file))
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+        q.page['main'] = ui.form_card(box='body_main', items=[
             ui.message_bar(type='warning', text=warning),
             ui.dropdown(name='train_file', label='Training data', value=q.app.train_file, required=True,
                         choices=choices),
@@ -120,7 +195,7 @@ async def select_table(q: Q, warning: str = ''):
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
     else:
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+        q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl(f'{q.app.task}'),
             ui.message_bar(type='warning', text=warning),
             ui.text(f'No data found. Please import data first.'),
@@ -158,17 +233,17 @@ async def train_menu(q: Q, warning: str = ''):
     if not q.app.is_classification:
         q.app.is_classification = True
     if not q.app.nfolds:
-        q.app.nfolds = 5
+        q.app.nfolds = '5'
     if not q.app.es_metric:
         q.app.es_metric = 'AUTO'
     if not q.app.es_rounds:
-        q.app.es_rounds = 3
+        q.app.es_rounds = '3'
 
     es_metrics = ['AUTO', 'deviance', 'logloss', 'MSE', 'RMSE', 'MAE', 'RMSLE', 'AUC', 'AUCPR', 'lift_top_group',
                   'misclassification', 'mean_per_class_error']
     es_metrics_choices = [ui.choice(i, i) for i in es_metrics]
     choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+    q.page['main'] = ui.form_card(box='body_main', items=[
         ui.text_xl(f'Training Options'),
         ui.message_bar(type='warning', text=warning),
         ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
@@ -179,8 +254,8 @@ async def train_menu(q: Q, warning: str = ''):
                   max=1440),
         ui.dropdown(name='es_metric', label='Early stopping metric', value=q.app.es_metric, required=True,
                     choices=es_metrics_choices),
-        ui.textbox(name='es_rounds', label='Early stopping rounds', value=q.app.es_rounds),
-        ui.textbox(name='nfolds', label='nfolds', value=q.app.nfolds),
+        ui.textbox(name='es_rounds', label='Early stopping rounds', value=str(q.app.es_rounds)),
+        ui.textbox(name='nfolds', label='nfolds', value=str(q.app.nfolds)),
         ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
     ])
 
@@ -203,7 +278,7 @@ def aml_train(aml, x, y, train):
 
 # Train AML model
 async def train_model(q: Q):
-    q.page['main'] = ui.form_card(box=app_config.main_box, items=[])
+    q.page['main'] = ui.form_card(box='body_main', items=[])
     if not q.args.target:
         await train_menu(q, 'Please select target column')
         return
@@ -212,8 +287,8 @@ async def train_model(q: Q):
     q.app.max_models = q.args.max_models
     q.app.max_runtime_mins = q.args.max_runtime_mins
     q.app.es_metric = q.args.es_metric
-    q.app.es_rounds = q.args.es_rounds
-    q.app.nfolds = q.args.nfolds
+    q.app.es_rounds = int(q.args.es_rounds)
+    q.app.nfolds = int(q.args.nfolds)
     q.app.is_classification = q.args.is_classification
 
     y = q.app.target
@@ -261,12 +336,12 @@ def table_from_df(df: pd.DataFrame, table_name: str):
         searchable=True  # Make column searchable
     ) for x in df.columns.values]
     # Rows for the table
-    rows = [ui.table_row(name=str(i), cells=[cell for cell in row]) for i, row in df.iterrows()]
+    rows = [ui.table_row(name=str(i), cells=[str(cell) for cell in row]) for i, row in df.iterrows()]
     table = ui.table(name=f'{table_name}',
              rows=rows,
              columns=columns,
              multiple=False,  # Allow multiple row selection
-             height='100%')
+             height='400px')
     return table
 
 
@@ -281,7 +356,7 @@ async def show_lb(q: Q):
 
         lb_table = table_from_df(lb_df, 'lb_table')
 
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+        q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
             ui.text(f'**Training shape:** {q.app.train_df.shape}'),
             ui.text(f'**Target:** {q.app.target}'),
@@ -289,7 +364,7 @@ async def show_lb(q: Q):
             lb_table
         ])
     else:
-        q.page['main'] = ui.form_card(box=app_config.main_box, items=[
+        q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
             ui.text('No models trained. Please train a model first.'),
             ui.buttons([ui.button(name='#train', label='Train a model', primary=True)])
@@ -316,7 +391,7 @@ async def get_mojo(q: Q):
     if q.args.lb_table:
         q.app.selected_model = q.args.lb_table[0]
     if not q.app.shap_row_index:
-        q.app.shap_row_index = 0
+        q.app.shap_row_index = str(0)
     if q.args.shap_row_index:
         q.app.shap_row_index = q.args.shap_row_index
 
@@ -344,9 +419,9 @@ async def get_mojo(q: Q):
             test[y] = test[y].asfactor()
 
     download_path, = await q.site.upload([mojo_path])
-    shap_choices = [ui.choice(i, i) for i in range(min(10, q.app.train_df.shape[0]))]
+    shap_choices = [ui.choice(str(i), str(i)) for i in range(min(10, q.app.train_df.shape[0]))]
 
-    q.page['main'] = ui.form_card(box=app_config.plot1_box, items=[
+    q.page['main'] = ui.form_card(box='body_main', items=[
         ui.text_l(f'**Model:** {model_str}'),
         ui.text(f'[Download MOJO]({download_path})'),
         ui.dropdown(name='shap_row_index', label='Select Row for Shapley Plot', value=q.app.shap_row_index,
@@ -360,7 +435,7 @@ async def get_mojo(q: Q):
         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
         q.page.add('plot21', ui.plot_card(
-            box=app_config.plot21_box,
+            box='charts_left',
             title='Variable Importance Plot',
             data=data('feature score', rows=rows),
             plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
@@ -368,19 +443,19 @@ async def get_mojo(q: Q):
         ))
     except Exception as e:
         print(f'No var_imp found for {model_str}: {e}')
-        q.page['plot21'] = ui.form_card(box=app_config.plot21_box, items=[
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
     try:
-        shap_plot = model.shap_explain_row_plot(frame=train, row_index=q.app.shap_row_index)
+        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index))
         q.page['plot22'] = ui.image_card(
-            box=app_config.plot22_box,
+            box='charts_right',
             title="Shapley Plot",
             type="png",
             image=get_image_from_matplotlib(shap_plot),
         )
     except Exception as e:
         print(f'No shap found for {model_str}: {e}')
-        q.page['plot22'] = ui.form_card(box=app_config.plot22_box, items=[
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
