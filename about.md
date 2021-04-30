@@ -15,4 +15,4 @@
 ### **Features**:
 * **Steam**: Connect to a users Steam profile and manage DAI instances.
 * **DAI**: Allows a user to connect to DAI or export experiments to MLOps.
- **MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.
+* *MLOps**: Allows a user to view and delete MLOps projects, deployments and test deployment endpoint for scoring.

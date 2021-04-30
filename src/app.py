@@ -264,7 +264,8 @@ async def serve(q: Q):
                                                  ])
     elif hash == 'mlops':
         #q.page['main'] = ui.frame_card(box=app_config.main_box, title='MLOps', path='https://mlops.wave.h2o.ai/')
-        await init_dai_client(q)
+        #await init_dai_client(q)
+        await show_tables(q)
     elif q.args.next_steam_menu or q.args.refresh_steam_menu:
         steam_menu(q)
     # Initialiaze mlops client

@@ -49,10 +49,11 @@ def table_from_projects(projects, table_name: str, sortable=False, filterable=Fa
 # Shows table of DAI experiments
 def show_dai_experiments(q: Q, card_name, card_box):
     driverless = q.user.dai_client
-    experiments = driverless.experiments.list()
     experiment_names = []
     experiment_keys = []
-    if experiments:
+    try:
+        experiments = driverless.experiments.list()
+        print(experiments)
         for experiment in experiments:
             experiment_names.append(experiment.name)
             experiment_keys.append(experiment.key)
@@ -60,17 +61,22 @@ def show_dai_experiments(q: Q, card_name, card_box):
         data_table = table_from_df(experiments_df, 'dai_experiments_table', filterable=True, searchable=True,
                                    groupable=True,
                                    height='700px')
-    else:
+        q.page[card_name] = ui.form_card(box=card_box, items=[
+            ui.text_xl('DAI Experiments'),
+            ui.button(name='#dai', label='Open DAI', primary=True),
+            data_table
+        ])
+    except Exception as e:
+        print('-----')
+        print(f'Error: {e}')
+        print('-----')
         experiments_df = pd.DataFrame()
-        data_table = ui.text('No experiments found')
+        data_table = ui.text('No DAI experiments found. If this is unexpected, please connect to a DAI instance using the Steam option in the menu.')
+        q.page[card_name] = ui.form_card(box=card_box, items=[
+            ui.text_xl('DAI Experiments'),
+            data_table
+        ])
 
-    q.page[card_name] = ui.form_card(box=card_box, items=[
-        ui.text_xl('DAI Experiments'),
-        #ui.link(path=q.user.dai_address_auth,
-        #        target='', label='Open DAI in a new Window', button=True),
-        ui.button(name='#dai', label='Open DAI', primary=True),
-        data_table
-    ])
     return experiments_df
 
 

@@ -45,8 +45,8 @@ def steam_selection(q: Q):
     # Store user selected instance
     instance_id = instances_df.iloc[selected_id,:]['id']
     q.user.instance_id = instance_id
-    q.user.dai_address = f'https://steam.wave.h2o.ai/proxy/driverless/{instance_id}/'
-    q.user.dai_address_auth = f'https://steam.wave.h2o.ai/oidc-login-start?forward=/proxy/driverless/{q.user.instance_id}/openid/callback'
+    q.user.dai_address = f'https://steam.demo.h2o.ai/proxy/driverless/{instance_id}/'
+    q.user.dai_address_auth = f'https://steam.demo.h2o.ai/oidc-login-start?forward=/proxy/driverless/{q.user.instance_id}/openid/callback'
     instance_name = instances_df.iloc[selected_id,:]['name']
     q.user.instance_name = instance_name
     instance_status = instances_df.iloc[selected_id,:]['status']
