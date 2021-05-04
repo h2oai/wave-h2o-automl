@@ -15,17 +15,9 @@ app_config = Configuration()
 
 # Initialize app
 def init_app(q: Q):
-    global_nav = [
-        ui.nav_group('Navigation', items=[
-            ui.nav_item(name='#home', label='Home'),
-            ui.nav_item(name='#import', label='Import Data'),
-            ui.nav_item(name='#dai', label='Build Model'),
-            ui.nav_item(name='#mlflow', label='MLFlow'),
-        ])]
-
     q.page['meta'] = ui.meta_card(box='', layouts=[
         ui.layout(
-            breakpoint='xs',
+            breakpoint='300px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
@@ -35,8 +27,8 @@ def init_app(q: Q):
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
                         ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
-                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='800px'),
-                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN),
                         ])
                     ]),
                 ]),
@@ -44,7 +36,7 @@ def init_app(q: Q):
             ]
         ),
         ui.layout(
-            breakpoint='m',
+            breakpoint='600px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
@@ -54,8 +46,8 @@ def init_app(q: Q):
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
                         ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
-                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='800px'),
-                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='800px'),
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='300px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='300px'),
                         ])
                     ]),
                 ]),
@@ -63,8 +55,45 @@ def init_app(q: Q):
             ]
         ),
         ui.layout(
-            breakpoint='xl',
-            width='1700px',
+            breakpoint='1000px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        ui.zone('menu'),
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='500px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='500px'),
+                        ])
+                    ]),
+                ]),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='1400px',
+            zones=[
+                ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
+                    ui.zone('main', zones=[
+                        ui.zone('menu'),
+                        # Main page single card
+                        ui.zone('body_main'),
+                        # Main page split into cards shown in vertical orientation
+                        ui.zone('charts', direction=ui.ZoneDirection.ROW, zones=[
+                            ui.zone('charts_left', direction=ui.ZoneDirection.COLUMN, size='700px'),
+                            ui.zone('charts_right', direction=ui.ZoneDirection.COLUMN, size='700px'),
+                        ])
+                    ]),
+                ]),
+                ui.zone('footer'),
+            ]
+        ),
+        ui.layout(
+            breakpoint='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
