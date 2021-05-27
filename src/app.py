@@ -1,6 +1,6 @@
 import h2o
 from h2o.automl import H2OAutoML
-from h2o_wave import Q, ui, app, main, data
+from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on
 from .config import *
 import time
 import pandas as pd
@@ -13,16 +13,23 @@ import io
 h2o.init()
 app_config = Configuration()
 
+
 # Initialize app
 def init_app(q: Q):
+    if not q.client.icon_color:
+        q.client.icon_color = '#CDDD38'
+
     q.page['meta'] = ui.meta_card(box='', layouts=[
         ui.layout(
             breakpoint='300px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                    ui.zone(name='tabs'),
+                    ui.zone(name='misc'),
+                ]),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
                     ui.zone('main', zones=[
-                        ui.zone('menu'),
                         # Main page single card
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
@@ -39,9 +46,12 @@ def init_app(q: Q):
             breakpoint='600px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                    ui.zone(name='tabs'),
+                    ui.zone(name='misc'),
+                ]),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
                     ui.zone('main', zones=[
-                        ui.zone('menu'),
                         # Main page single card
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
@@ -58,9 +68,12 @@ def init_app(q: Q):
             breakpoint='1000px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                    ui.zone(name='tabs'),
+                    ui.zone(name='misc'),
+                ]),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
                     ui.zone('main', zones=[
-                        ui.zone('menu'),
                         # Main page single card
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
@@ -77,9 +90,12 @@ def init_app(q: Q):
             breakpoint='1400px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                    ui.zone(name='tabs'),
+                    ui.zone(name='misc'),
+                ]),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
                     ui.zone('main', zones=[
-                        ui.zone('menu'),
                         # Main page single card
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
@@ -96,9 +112,12 @@ def init_app(q: Q):
             breakpoint='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                    ui.zone(name='tabs'),
+                    ui.zone(name='misc'),
+                ]),
                 ui.zone('body', direction=ui.ZoneDirection.ROW, zones=[
                     ui.zone('main', zones=[
-                        ui.zone('menu'),
                         # Main page single card
                         ui.zone('body_main'),
                         # Main page split into cards shown in vertical orientation
@@ -114,8 +133,33 @@ def init_app(q: Q):
     ])
     # Header for app
     q.page['header'] = ui.header_card(box='header', title=app_config.title, subtitle=app_config.subtitle,
-                                      icon='Settings', icon_color='yellow') #, nav=global_nav)
-    q.page['footer'] = ui.footer_card(box='footer', caption='(c) 2021 H2O.ai. All rights reserved.')
+                                      icon='Settings', icon_color=q.client.icon_color)
+    q.page['footer'] = ui.footer_card(box='footer', caption='Made with 💛 using <a href="https://wave.h2o.ai" target="_blank">H2O Wave</a>')
+
+
+async def update_theme(q: Q):
+    """
+    Update theme of app.
+    """
+
+    copy_expando(q.args, q.client)
+
+    if q.client.theme_dark:
+        q.client.icon_color = 'black'
+        q.page['meta'].theme = 'neon'
+        q.page['header'].icon_color = q.client.icon_color
+        q.client.img_source = 'https://i.imgur.com/yH2zRAm.jpg'
+    else:
+        q.client.icon_color = '#CDDD38'
+        q.page['meta'].theme = 'light'
+        q.page['header'].icon_color = q.client.icon_color
+        q.client.img_source = 'https://i.imgur.com/jLrt5mr.png'
+
+    q.page['misc'].items[2].toggle.value = q.client.theme_dark
+
+    q.page['main'].items[0].text.content = f'<center><img width="240" height=240" src="{q.client.img_source}"></center>'
+
+    await q.page.save()
 
 
 @app('/')
@@ -129,7 +173,9 @@ async def serve(q: Q):
 
     # Hash routes user when tabs are clicked
     hash = q.args['#']
-    if hash == 'guide':
+    if q.args.theme_dark is not None and q.args.theme_dark != q.client.theme_dark:
+        await update_theme(q)
+    elif hash == 'guide':
         await clean_cards(q)
         await main_menu(q)
     elif hash == 'import':
@@ -162,30 +208,51 @@ async def serve(q: Q):
 
 async def main_menu(q: Q):
     q.app.df_rows = []
+    if not q.client.img_source:
+        q.client.img_source = 'https://i.imgur.com/jLrt5mr.png'
 
-    q.page['menu'] = ui.toolbar_card(
-        box='menu',
+    q.page['menu'] = ui.tab_card(
+        box='tabs',
         items=[
-            ui.command(name="#guide", label="Home", caption="Home", icon="Home"),
-            ui.command(name="#import", label="Import Data", caption="Import Data", icon="Database"),
-            ui.command(name="#train", label="Train", caption="Train", icon="BullseyeTarget"),
-            ui.command(name="#lb", label="Leaderboard", caption="Leaderboard", icon="ClipboardList"),
-        ])
+            ui.tab(name="#guide", label="Home",  icon="Home"),
+            ui.tab(name="#import", label="Import Data",  icon="Database"),
+            ui.tab(name="#train", label="Train",  icon="BullseyeTarget"),
+            ui.tab(name="#lb", label="Leaderboard", icon="ClipboardList"),
+        ],
+        link=True
+    )
 
     # Logo
     if not q.app.logo_url:
         q.app.logo_url, = await q.site.upload([logo_file])
 
-    # Navbar and main placeholder
-    # q.page['logo'] = ui.markup_card(
-    #   box=logo_box,
-    #  title='',
-    #  content="""<p style='text-align:center; vertical-align: middle; display: table-cell; width: 134px;'>"""
-    #          """<a href='https://www.h2o.ai/h2o-q/'> <img src='""" + q.app.logo_url + """' height='50px' width='50px'> </a> </p>"""
+    q.page['misc'] = ui.section_card(
+        box='misc',
+        title='',
+        subtitle='',
+        items=[
+            ui.link(label='Documentation', path='https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html', target=''),
+            ui.text(content=''),
+            ui.toggle(name='theme_dark', label='Dark Mode', value=q.client.theme_dark, trigger=True)
+        ]
+    )
 
-    # )
+    q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.text(f"""
+<center><img width="240" height=240" src="{q.client.img_source}"></center>"""),
+            #ui.frame(content='<h2><center>H2O-3 AutoML</center></h2>', height='60px'),
+            ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
+            ui.text("""
+This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI. 
+### **Features**:
+* **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.<br>
+* **Leaderboard**: Visualizing the AML leaderboard.<br>
+* **Explainability**: Shows feature importance and row Shapley contributions. <br>
+* **Deployment**: Select a model for MOJO download.<br>
 
-    q.page['main'] = ui.form_card(box='body_main', items=app_config.items_guide_tab)
+Reference: https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
+            """),
+        ])
     await q.page.save()
 
 
