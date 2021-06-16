@@ -19,7 +19,7 @@ def init_app(q: Q):
     if not q.client.icon_color:
         q.client.icon_color = '#CDDD38'
 
-    q.page['meta'] = ui.meta_card(box='',title='', layouts=[
+    q.page['meta'] = ui.meta_card(box='',title='H2O AutoML', layouts=[
         ui.layout(
             breakpoint='300px',
             zones=[
