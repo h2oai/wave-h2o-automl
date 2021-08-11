@@ -9,6 +9,7 @@ import concurrent.futures
 import numpy as np
 import base64
 import io
+from loguru import logger
 
 h2o.init()
 app_config = Configuration()
@@ -162,50 +163,7 @@ async def update_theme(q: Q):
     await q.page.save()
 
 
-@app('/')
-async def serve(q: Q):
-    cur_dir = os.getcwd()
-    q.app.tmp_dir = cur_dir + app_config.tmp_dir
-    if not os.path.exists(q.app.tmp_dir):
-        os.mkdir(q.app.tmp_dir)
-
-    init_app(q)
-
-    # Hash routes user when tabs are clicked
-    hash = q.args['#']
-    if q.args.theme_dark is not None and q.args.theme_dark != q.client.theme_dark:
-        await update_theme(q)
-    elif hash == 'guide':
-        await clean_cards(q)
-        await main_menu(q)
-    elif hash == 'import':
-        await clean_cards(q)
-        await import_menu(q)
-    elif hash == 'train':
-        await clean_cards(q)
-        await select_table(q)
-    elif hash == 'lb' or q.args.back_lb:
-        await clean_cards(q)
-        await show_lb(q)
-    # User selected files from import menu
-    elif q.args.uploaded_file:
-        await upload_data(q)
-    # User selected train/test file
-    elif q.args.selected_tables_next:
-        await train_menu(q)
-    # User starts training
-    elif q.args.next_train:
-        await train_model(q)
-    # Row in table was clicked
-    elif q.args.lb_table:
-        await get_mojo(q)
-    elif q.args.shap_row_index:
-        await get_mojo(q)
-    else:
-        await main_menu(q)
-    await q.page.save()
-
-
+@on('guide')
 async def main_menu(q: Q):
     q.app.df_rows = []
     if not q.client.img_source:
@@ -214,10 +172,10 @@ async def main_menu(q: Q):
     q.page['menu'] = ui.tab_card(
         box='tabs',
         items=[
-            ui.tab(name="#guide", label="Home",  icon="Home"),
-            ui.tab(name="#import", label="Import Data",  icon="Database"),
-            ui.tab(name="#train", label="Train",  icon="BullseyeTarget"),
-            ui.tab(name="#lb", label="Leaderboard", icon="ClipboardList"),
+            ui.tab(name="guide", label="Home",  icon="Home"),
+            ui.tab(name="import", label="Import Data",  icon="Database"),
+            ui.tab(name="train", label="Train",  icon="BullseyeTarget"),
+            ui.tab(name="lb", label="Leaderboard", icon="ClipboardList"),
         ],
         link=True
     )
@@ -257,6 +215,7 @@ Reference: https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
 
 
 # Menu for importing new datasets
+@on('import')
 async def import_menu(q: Q):
     q.page['main'] = ui.form_card(box='body_main', items=[
         ui.text_xl('Import Data'),
@@ -272,12 +231,13 @@ async def upload_data(q: Q):
     time.sleep(1)
     q.page['main'] = ui.form_card(box='body_main',
                                   items=[ui.message_bar('success', 'File Imported! Please select an action'),
-                                         ui.buttons([ui.button(name='#train', label='Train a model', primary=True),
-                                                     ui.button(name='#guide', label='Main Menu', primary=False)])])
+                                         ui.buttons([ui.button(name='train', label='Train a model', primary=True),
+                                                     ui.button(name='guide', label='Main Menu', primary=False)])])
 
 
 # Menu for selecting a pre-loaded table
-async def select_table(q: Q, warning: str = ''):
+@on('train')
+async def select_table(q: Q, arg=False, warning: str = ''):
     choices = []
     if uploaded_files_dict:
         for file in uploaded_files_dict:
@@ -295,7 +255,7 @@ async def select_table(q: Q, warning: str = ''):
             ui.text_xl(f'{q.app.task}'),
             ui.message_bar(type='warning', text=warning),
             ui.text(f'No data found. Please import data first.'),
-            ui.buttons([ui.button(name='#import', label='Import Data', primary=True)])
+            ui.buttons([ui.button(name='import', label='Import Data', primary=True)])
         ])
 
 
@@ -303,7 +263,7 @@ async def select_table(q: Q, warning: str = ''):
 async def train_menu(q: Q, warning: str = ''):
     # Error handling
     if not q.args.train_file and not q.app.train_file:
-        await select_table(q, 'Please select training data')
+        await select_table(q, False, 'Please select training data')
         return
     # Store train/test file
     if q.args.train_file:
@@ -322,7 +282,6 @@ async def train_menu(q: Q, warning: str = ''):
         else:
             local_path = await q.site.download(uploaded_files_dict[q.app.test_file][0], '.')
         q.app.test_df = pd.read_csv(local_path)
-
     # Default options
     if not q.app.max_models:
         q.app.max_models = 10
@@ -442,6 +401,8 @@ def table_from_df(df: pd.DataFrame, table_name: str):
 
 
 # Show leaderboard
+@on('lb')
+@on('back_lb')
 async def show_lb(q: Q):
     if q.app.aml:
         # H2O automl object
@@ -463,7 +424,7 @@ async def show_lb(q: Q):
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
             ui.text('No models trained. Please train a model first.'),
-            ui.buttons([ui.button(name='#train', label='Train a model', primary=True)])
+            ui.buttons([ui.button(name='train', label='Train a model', primary=True)])
         ])
 
 
@@ -483,6 +444,7 @@ def get_image_from_matplotlib(matplotlib_obj):
 
 
 # Get MOJO for selected row in table
+@on('lb_table')
 async def get_mojo(q: Q):
     if q.args.lb_table:
         q.app.selected_model = q.args.lb_table[0]
@@ -555,3 +517,40 @@ async def get_mojo(q: Q):
         q.page['plot22'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
+
+
+@app('/')
+async def serve(q: Q):
+    cur_dir = os.getcwd()
+    q.app.tmp_dir = cur_dir + app_config.tmp_dir
+    if not os.path.exists(q.app.tmp_dir):
+        os.mkdir(q.app.tmp_dir)
+
+    # Default is light mode
+    if not q.client.theme_dark:
+        q.client.theme_dark = False
+
+    if not q.client.app_initialized:
+        init_app(q)
+        q.client.app_initialized = True
+
+    # Clean cards
+    await clean_cards(q)
+
+    # Hash routes user when tabs are clicked
+    if q.args.theme_dark is not None and q.args.theme_dark != q.client.theme_dark:
+        await update_theme(q)
+    # User selected files from import menu
+    elif q.args.uploaded_file:
+        await upload_data(q)
+    # User selected train/test file
+    elif q.args.selected_tables_next:
+        await train_menu(q)
+    # User starts training
+    elif q.args.next_train:
+        await train_model(q)
+    elif q.args.shap_row_index and q.args.shap_row_index != q.app.shap_row_index:
+        await get_mojo(q)
+    elif not await handle_on(q):
+        await main_menu(q)
+    await q.page.save()
