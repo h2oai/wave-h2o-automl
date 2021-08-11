@@ -4,7 +4,7 @@ Version = "0.3.3"
 Title = "H2O AutoML"
 Description = "AutoML using H2O-3"
 Category = "Data Science"
-Keywords = ["h2o automl"]
+tags = ["MACHINE_LEARNING"]
 LongDescription = "about.md"
 
 [Runtime]
