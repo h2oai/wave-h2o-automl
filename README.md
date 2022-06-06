@@ -12,7 +12,7 @@ Follow the instructions [here](https://wave.h2o.ai/docs/installation) to downloa
 ### 2. Setup Your Python Environment
 
 ```bash
-$ git clone https://github.com/h2oai/wave-h2o-automl.git
+$ git clone git@github.com:h2oai/wave-h2o-automl.git
 $ cd wave-h2o-automl
 $ make setup
 $ source venv/bin/activate
