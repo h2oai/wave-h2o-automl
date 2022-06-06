@@ -7,7 +7,7 @@
 ## Installation 
 
 ### 1. Run the Wave Server
-Follow the instructions [here](https://h2oai.github.io/wave/docs/installation) to download and run the latest Wave Server, a requirement for apps. 
+Follow the instructions [here](https://wave.h2o.ai/docs/installation) to download and run the latest Wave Server, a requirement for apps. 
 
 ### 2. Setup Your Python Environment
 
