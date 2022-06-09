@@ -411,14 +411,12 @@ async def show_lb(q: Q):
         lb = aml.leaderboard
         lb_df = lb.as_data_frame()
 
-        # beginning of new code block
-        lb_df['auc'] = lb_df['auc'].round(5)
-        lb_df['logloss'] = lb_df['logloss'].round(5)
-        lb_df['aucpr'] = lb_df['aucpr'].round(5)
-        lb_df['mean_per_class_error'] = lb_df['mean_per_class_error'].round(5)
-        lb_df['rmse'] = lb_df['rmse'].round(5)
-        lb_df['mse'] = lb_df['mse'].round(5)
-        # end of new code block
+        #round data to 5 decimal places
+        cols = lb_df.columns.to_list()
+        cols.remove('model_id')
+        for col in cols:
+            lb_df[col] = lb_df[col].round(5)
+
 
         lb_table = table_from_df(lb_df, 'lb_table')
 
