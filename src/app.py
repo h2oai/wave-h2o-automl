@@ -201,7 +201,7 @@ async def main_menu(q: Q):
             #ui.frame(content='<h2><center>H2O-3 AutoML</center></h2>', height='60px'),
             ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
             ui.text("""
-This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI. 
+This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
 ### **Features**:
 * **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.<br>
 * **Leaderboard**: Visualizing the AML leaderboard.<br>
@@ -407,9 +407,19 @@ async def show_lb(q: Q):
     if q.app.aml:
         # H2O automl object
         aml = q.app.aml
+
         # Get leaderboard
-        lb = aml.leaderboard
+        #lb = aml.leaderboard
+        lb = h2o.automl.get_leaderboard(aml, extra_columns = "ALL")
         lb_df = lb.as_data_frame()
+
+        #round data to 5 decimal places
+        cols = lb_df.columns.to_list()
+        cols.remove('model_id')
+        cols.remove('training_time_ms')
+        for col in cols:
+            lb_df[col] = lb_df[col].round(5)
+
 
         lb_table = table_from_df(lb_df, 'lb_table')
 
