@@ -176,6 +176,7 @@ async def main_menu(q: Q):
             ui.tab(name="import", label="Import Data",  icon="Database"),
             ui.tab(name="train", label="Train",  icon="BullseyeTarget"),
             ui.tab(name="lb", label="Leaderboard", icon="ClipboardList"),
+            ui.tab(name="explain", label="Explain", icon="ClipboardList"),
         ],
         link=True
     )
@@ -367,7 +368,7 @@ async def train_model(q: Q):
     if q.app.is_classification:
         train[y] = train[y].asfactor()
 
-    # Run AutoML for 20 base models (limited to 1 hour max runtime by default)
+    # Run AutoML (limited to 1 hour max runtime by default)
     max_runtime_secs = q.app.max_runtime_mins * 60
     aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
                     stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
@@ -497,7 +498,7 @@ async def get_mojo(q: Q):
         ui.buttons([ui.button(name='back_lb', label='Back to Leaderboard', primary=True)])
     ])
 
-    # Variable importance plots
+    # Variable importance plot
     try:
         var_imp_df = model.varimp(use_pandas=True)
         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
@@ -514,6 +515,7 @@ async def get_mojo(q: Q):
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
+    # SHAP plot
     try:
         shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index))
         q.page['plot22'] = ui.image_card(
@@ -527,7 +529,20 @@ async def get_mojo(q: Q):
         q.page['plot22'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
-
+    # Learning curve plots 
+    try:
+        learning_curve_plot = model.learning_curve_plot()
+        q.page['plot31'] = ui.image_card(
+            box='charts_left',
+            title="Learning curve Plot",
+            type="png",
+            image=get_image_from_matplotlib(learning_curve_plot),
+        )
+    except Exception as e:
+        print(f'No Learning Curve found for {model_str}: {e}')
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Learning Curve unavailable for **{model_str}**')
+           ])
 
 @app('/')
 async def serve(q: Q):
