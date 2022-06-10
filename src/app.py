@@ -407,13 +407,16 @@ async def show_lb(q: Q):
     if q.app.aml:
         # H2O automl object
         aml = q.app.aml
+
         # Get leaderboard
-        lb = aml.leaderboard
+        #lb = aml.leaderboard
+        lb = h2o.automl.get_leaderboard(aml, extra_columns = "ALL")
         lb_df = lb.as_data_frame()
 
         #round data to 5 decimal places
         cols = lb_df.columns.to_list()
         cols.remove('model_id')
+        cols.remove('training_time_ms')
         for col in cols:
             lb_df[col] = lb_df[col].round(5)
 
