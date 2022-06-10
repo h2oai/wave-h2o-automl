@@ -417,6 +417,8 @@ async def show_lb(q: Q):
         cols = lb_df.columns.to_list()
         cols.remove('model_id')
         cols.remove('training_time_ms')
+        cols.remove('predict_time_per_row_ms')
+        cols.remove('algo')
         for col in cols:
             lb_df[col] = lb_df[col].round(5)
 
