@@ -25,7 +25,7 @@ def init_app(q: Q):
             breakpoint='300px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -47,7 +47,7 @@ def init_app(q: Q):
             breakpoint='600px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -69,7 +69,7 @@ def init_app(q: Q):
             breakpoint='1000px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -91,7 +91,7 @@ def init_app(q: Q):
             breakpoint='1400px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -113,7 +113,7 @@ def init_app(q: Q):
             breakpoint='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -243,7 +243,7 @@ async def select_table(q: Q, arg=False, warning: str = ''):
     if uploaded_files_dict:
         for file in uploaded_files_dict:
             choices.append(ui.choice(file, file))
-        q.page['main'] = ui.form_card(box='body_main', items=[
+        q.page['main'] = ui.form_card(box= ui.box('body_main', width='500px'), items=[
             ui.message_bar(type='warning', text=warning),
             ui.dropdown(name='train_file', label='Training data', value=q.app.train_file, required=True,
                         choices=choices),
@@ -252,7 +252,7 @@ async def select_table(q: Q, arg=False, warning: str = ''):
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
     else:
-        q.page['main'] = ui.form_card(box='body_main', items=[
+        q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
             ui.text_xl(f'{q.app.task}'),
             ui.message_bar(type='warning', text=warning),
             ui.text(f'No data found. Please import data first.'),
@@ -299,7 +299,7 @@ async def train_menu(q: Q, warning: str = ''):
                   'misclassification', 'mean_per_class_error']
     es_metrics_choices = [ui.choice(i, i) for i in es_metrics]
     choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
-    q.page['main'] = ui.form_card(box='body_main', items=[
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
         ui.text_xl(f'Training Options'),
         ui.message_bar(type='warning', text=warning),
         ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
@@ -443,7 +443,7 @@ async def show_lb(q: Q):
 
 # Clean cards
 async def clean_cards(q: Q):
-    cards_to_clean = ['plot1', 'plot21', 'plot22']
+    cards_to_clean = ['plot1', 'plot21', 'plot22', 'plot31', 'foo']
     for card in cards_to_clean:
         del q.page[card]
 
@@ -508,7 +508,7 @@ async def get_mojo(q: Q):
         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
         q.page.add('plot21', ui.plot_card(
-            box='charts_left',
+            box=ui.box('charts_left', height='300px'),
             title='Variable Importance Plot',
             data=data('feature score', rows=rows),
             plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
@@ -562,7 +562,7 @@ async def generate_explain_automl(q: Q):
         var_imp_df = model.varimp(use_pandas=True)
         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-        q.page.add('plot21', ui.plot_card(
+        q.page.add('foo', ui.plot_card(
             box='charts_left',
             title='Variable Importance Plot',
             data=data('feature score', rows=rows),
@@ -572,7 +572,7 @@ async def generate_explain_automl(q: Q):
     except Exception as e:
         model_str = "foo"
         print(f'No var_imp found for {model_str}: {e}')
-        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+        q.page['foo'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
 
