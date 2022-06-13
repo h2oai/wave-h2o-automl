@@ -450,6 +450,8 @@ async def clean_cards(q: Q):
 
 # Image from matplotlib object
 def get_image_from_matplotlib(matplotlib_obj):
+    if hasattr(matplotlib_obj, "figure"):
+        matplotlib_obj = matplotlib_obj.figure()
     buffer = io.BytesIO()
     matplotlib_obj.savefig(buffer, format="png")
     buffer.seek(0)
@@ -519,7 +521,7 @@ async def get_mojo(q: Q):
            ])
     # SHAP plot
     try:
-        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index))
+        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index), figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot22'] = ui.image_card(
             box='charts_right',
             title="Shapley Plot",
@@ -531,9 +533,10 @@ async def get_mojo(q: Q):
         q.page['plot22'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
-    # Learning curve plots 
+    # Learning curve plots
+    # TO DO: why is this showing up on all the tabs? 
     try:
-        learning_curve_plot = model.learning_curve_plot()
+        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
         q.page['plot31'] = ui.image_card(
             box='charts_left',
             title="Learning curve Plot",
@@ -545,6 +548,36 @@ async def get_mojo(q: Q):
         q.page['plot31'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Learning Curve unavailable for **{model_str}**')
            ])
+
+
+# Menu for importing new datasets
+@on('explain')
+async def generate_explain_automl(q: Q):
+
+    # TO DO: Figure out how to populate the group/automl level plots
+    # - how to access the automl object from the other tab
+
+    # Variable importance plot
+    try:
+        var_imp_df = model.varimp(use_pandas=True)
+        sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
+        rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
+        q.page.add('plot21', ui.plot_card(
+            box='charts_left',
+            title='Variable Importance Plot',
+            data=data('feature score', rows=rows),
+            plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
+                                  y_title='Feature', color='#33BBFF')])
+        ))
+    except Exception as e:
+        model_str = "foo"
+        print(f'No var_imp found for {model_str}: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Variable importance unavailable for **{model_str}**')
+           ])
+
+
+
 
 @app('/')
 async def serve(q: Q):
