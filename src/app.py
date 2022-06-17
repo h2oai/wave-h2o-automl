@@ -504,21 +504,37 @@ async def get_mojo(q: Q):
 
     # Variable importance plot
     try:
-        var_imp_df = model.varimp(use_pandas=True)
-        sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
-        rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-        q.page.add('plot21', ui.plot_card(
-            box=ui.box('charts_left', height='300px'),
-            title='Variable Importance Plot',
-            data=data('feature score', rows=rows),
-            plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
-                                  y_title='Feature', color='#33BBFF')])
-        ))
+        varimp_plot = model.varimp_plot(server = True)
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Variable Importance Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_plot),
+        )
     except Exception as e:
-        print(f'No var_imp found for {model_str}: {e}')
+        print(f'No variable importance found for {model_str}: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
+
+    #try:
+    #    var_imp_df = model.varimp(use_pandas=True)
+    #    sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
+    #    rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
+    #    q.page.add('plot21', ui.plot_card(
+    #        box=ui.box('charts_left', height='300px'),
+    #        title='Variable Importance Plot',
+    #        data=data('feature score', rows=rows),
+    #        plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
+    #                              y_title='Feature', color='#33BBFF')])
+    #    ))
+    #except Exception as e:
+    #    print(f'No var_imp found for {model_str}: {e}')
+    #    q.page['plot21'] = ui.form_card(box='charts_left', items=[
+    #        ui.text(f'Variable importance unavailable for **{model_str}**')
+    #       ])
+
+
     # SHAP plot
     try:
         shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index), figsize=(FIGSIZE[0], FIGSIZE[0]))
@@ -534,7 +550,7 @@ async def get_mojo(q: Q):
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
     # Learning curve plots
-    # TO DO: why is this showing up on all the tabs? 
+    # TO DO: why is this showing up on all the tabs?
     try:
         learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
         q.page['plot31'] = ui.image_card(
