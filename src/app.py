@@ -443,6 +443,7 @@ async def show_lb(q: Q):
 
 # Clean cards
 async def clean_cards(q: Q):
+    # TO DO: update this to clean new explain cards
     cards_to_clean = ['plot1', 'plot21', 'plot22', 'plot31', 'foo']
     for card in cards_to_clean:
         del q.page[card]
@@ -568,29 +569,64 @@ async def get_mojo(q: Q):
 
 # Menu for importing new datasets
 @on('explain')
-async def generate_explain_automl(q: Q):
 
-    # TO DO: Figure out how to populate the group/automl level plots
-    # - how to access the automl object from the other tab
+async def picker_example(q: Q, arg=False, warning: str = ''):
+    choices = []
+    models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
+    if models_list:
+        for model_id in models_list:
+            choices.append(ui.choice(model_id, model_id))
+    print(choices)        
+    q.page['main'] = ui.form_card(box='body_main', items=[
+        ui.picker(name='picker', label='Picker', choices=choices),
+        ui.buttons([ui.button(name='explain', label='Foo Explain', primary=True)])
+    ])
+    # TO DO: actually do something when the user clicks on the button
+    # - create the plots using that particular model
 
     # Variable importance plot
     try:
-        var_imp_df = model.varimp(use_pandas=True)
-        sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
-        rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-        q.page.add('foo', ui.plot_card(
-            box='charts_left',
-            title='Variable Importance Plot',
-            data=data('feature score', rows=rows),
-            plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
-                                  y_title='Feature', color='#33BBFF')])
-        ))
-    except Exception as e:
+        #model_str = "foo"  #this is what we get in the picker
+        #model = h2o.get_model(model_str)
+        # after ^^ this code works, comment out the two lines below
         model_str = "foo"
-        print(f'No var_imp found for {model_str}: {e}')
-        q.page['foo'] = ui.form_card(box='charts_left', items=[
+        model = q.app.aml.get_best_model(algorithm="xgboost")
+        varimp_plot = model.varimp_plot(server = True)
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Variable Importance Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_plot),
+        )
+    except Exception as e:
+        print(f'No variable importance found for {model_str}: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
+
+# async def generate_explain_automl(q: Q):
+
+#     # TO DO: Figure out how to populate the group/automl level plots
+#     # - how to access the automl object from the other tab
+
+#     # Variable importance plot
+#     try:
+#         var_imp_df = model.varimp(use_pandas=True)
+#         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
+#         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
+#         q.page.add('foo', ui.plot_card(
+#             box='charts_left',
+#             title='Variable Importance Plot',
+#             data=data('feature score', rows=rows),
+#             plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
+#                                   y_title='Feature', color='#33BBFF')])
+#         ))
+#     except Exception as e:
+#         model_str = "foo"
+#         print(f'No var_imp found for {model_str}: {e}')
+#         q.page['foo'] = ui.form_card(box='charts_left', items=[
+#             ui.text(f'Variable importance unavailable for **{model_str}**')
+#            ])
 
 
 
@@ -627,6 +663,9 @@ async def serve(q: Q):
         await train_model(q)
     elif q.args.shap_row_index and q.args.shap_row_index != q.app.shap_row_index:
         await get_mojo(q)
+    # User clicks explain tab
+    #elif q.args.explain:
+    #    await picker_example(q)
     elif not await handle_on(q):
         await main_menu(q)
     await q.page.save()
