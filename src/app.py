@@ -685,14 +685,14 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
 
     await clean_cards(q)
 
-    #q.page['main'] = ui.tab_card(
-    #    box='subtabs',
-    #    items=[
-    #        ui.tab(name="summary", label="Models Summary",  icon="Home"),
-    #        ui.tab(name="varimp", label="Variable Explain",  icon="Database"),
-    #    ],
-    #    link=True
-    #)
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
 
     # Variable Importance Heatmap
     try:
