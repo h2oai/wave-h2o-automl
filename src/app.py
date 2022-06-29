@@ -176,7 +176,8 @@ async def main_menu(q: Q):
             ui.tab(name="import", label="Import Data",  icon="Database"),
             ui.tab(name="train", label="Train",  icon="BullseyeTarget"),
             ui.tab(name="lb", label="Leaderboard", icon="ClipboardList"),
-            ui.tab(name="explain", label="Explain", icon="ClipboardList"),
+            ui.tab(name="explain", label="AutoML Viz", icon="ClipboardList"),
+            ui.tab(name="explain2", label="Model Explain", icon="ClipboardList"),
         ],
         link=True
     )
@@ -444,7 +445,7 @@ async def show_lb(q: Q):
 # Clean cards
 async def clean_cards(q: Q):
     # TO DO: update this to clean new explain cards
-    cards_to_clean = ['plot1', 'plot21', 'plot22', 'plot31', 'foo']
+    cards_to_clean = ['main', 'plot1', 'plot21', 'plot22', 'plot31', 'plot32', 'foo']
     for card in cards_to_clean:
         del q.page[card]
 
@@ -462,6 +463,9 @@ def get_image_from_matplotlib(matplotlib_obj):
 # Get MOJO for selected row in table
 @on('lb_table')
 async def get_mojo(q: Q):
+
+    await clean_cards(q)
+
     if q.args.lb_table:
         q.app.selected_model = q.args.lb_table[0]
     if not q.app.shap_row_index:
@@ -567,22 +571,24 @@ async def get_mojo(q: Q):
            ])
 
 
-# Menu for importing new datasets
-@on('explain')
 
+# Menu for importing new datasets
+@on('explain2')
 async def picker_example(q: Q, arg=False, warning: str = ''):
+    await clean_cards(q)
     choices = []
     models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
     if models_list:
         for model_id in models_list:
             choices.append(ui.choice(model_id, model_id))
-    print(choices)        
+    print(choices)
     q.page['main'] = ui.form_card(box='body_main', items=[
-        ui.picker(name='picker', label='Picker', choices=choices),
-        ui.buttons([ui.button(name='explain', label='Foo Explain', primary=True)])
+        ui.picker(name='model_picker', label='Picker', choices=choices, max_choices = 1),
+        ui.buttons([ui.button(name='select_model', label='Foo Explain', primary=True)])
     ])
     # TO DO: actually do something when the user clicks on the button
     # - create the plots using that particular model
+
 
     # Variable importance plot
     try:
@@ -591,6 +597,8 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
         # after ^^ this code works, comment out the two lines below
         model_str = "foo"
         model = q.app.aml.get_best_model(algorithm="xgboost")
+        model_str = q.args.model_picker[0]
+        model = h2o.get_model(q.args.model_picker[0])
         varimp_plot = model.varimp_plot(server = True)
         q.page['plot21'] = ui.image_card(
             box='charts_left',
@@ -602,6 +610,47 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
         print(f'No variable importance found for {model_str}: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
+           ])
+
+
+    # Shapley Summary Plot
+    try:
+        model_str = q.args.model_picker[0]
+        model = h2o.get_model(q.args.model_picker[0])
+
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+
+        shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_right',
+            title="Shapley Summary Plot",
+            type="png",
+            image=get_image_from_matplotlib(shap_plot),
+        )
+    except Exception as e:
+        print(f'No shapley summary found for {model_str}: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Shapley Summary unavailable for **{model_str}**')
+           ])
+
+    #Learning Curve Plot
+    try:
+        model_str = q.args.model_picker[0]
+        model = h2o.get_model(q.args.model_picker[0])
+        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+        q.page['plot31'] = ui.image_card(
+            box='charts_left',
+            title="Learning curve Plot",
+            type="png",
+            image=get_image_from_matplotlib(learning_curve_plot),
+        )
+    except Exception as e:
+        print(f'No Learning Curve found for {model_str}: {e}')
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Learning Curve unavailable for **{model_str}**')
            ])
 
 # async def generate_explain_automl(q: Q):
@@ -627,6 +676,97 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 #         q.page['foo'] = ui.form_card(box='charts_left', items=[
 #             ui.text(f'Variable importance unavailable for **{model_str}**')
 #            ])
+
+
+
+#AutoML Level Plots Tab
+@on('explain')
+async def aml_plots(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    #q.page['main'] = ui.tab_card(
+    #    box='subtabs',
+    #    items=[
+    #        ui.tab(name="summary", label="Models Summary",  icon="Home"),
+    #        ui.tab(name="varimp", label="Variable Explain",  icon="Database"),
+    #    ],
+    #    link=True
+    #)
+
+    # Variable Importance Heatmap
+    try:
+        varimp_heat_plot = q.app.aml.varimp_heatmap()
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Variable Importance Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_heat_plot),
+        )
+    except Exception as e:
+        print(f'No variable importance heatmap found: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Variable importance heatmap unavailable')
+           ])
+
+
+    # Model Correlation Heatmap
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_right',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+
+    choices = []
+    x = q.app.train_df.columns.to_list()
+    x.remove(q.app.target)
+    if x:
+        for col in x:
+            choices.append(ui.choice(col, col))
+    print(choices)
+    q.page['plot31'] = ui.form_card(box='charts_left', items=[
+        ui.picker(name='column_pd', label='Picker', choices=choices, max_choices = 1),
+        ui.buttons([ui.button(name='select_column_pd', label='Foo Explain', primary=True)])
+    ])
+
+
+    # PD Plot
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+
+        #col = list(q.app.train_df.columns)[1]
+        col = q.args.column_pd[0]
+
+        pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = col)
+        q.page['plot32'] = ui.image_card(
+            box='charts_right',
+            title="Partial Dependence Multi-model Plot",
+            type="png",
+            image=get_image_from_matplotlib(pd_plot),
+        )
+    except Exception as e:
+        print(f'No Partial Dependence Multi-model Plot found: {e}')
+        q.page['plot32'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Partial Dependence Multi-model Plot unavailable')
+           ])
+
+
 
 
 
@@ -664,8 +804,10 @@ async def serve(q: Q):
     elif q.args.shap_row_index and q.args.shap_row_index != q.app.shap_row_index:
         await get_mojo(q)
     # User clicks explain tab
-    #elif q.args.explain:
-    #    await picker_example(q)
+    elif q.args.select_column_pd:
+        await aml_plots(q)
+    elif q.args.select_model:
+        await picker_example(q)
     elif not await handle_on(q):
         await main_menu(q)
     await q.page.save()
