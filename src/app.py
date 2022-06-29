@@ -687,6 +687,120 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
 
     q.page['main'] = ui.tab_card(
         box='body_main',
+        value = 'automl_summary',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
+
+    # Model Correlation Heatmap (1)
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_left',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+
+    # Model Correlation Heatmap (2)
+    # Duplicated for now, but needs to be replaced with pareto front
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_right',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+
+# This is currently the same code as the aml_plots above
+# we should use one function twice
+@on('automl_summary')
+async def aml_summary(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        value = 'automl_summary',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
+
+    # Model Correlation Heatmap (1)
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_left',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+    # Model Correlation Heatmap (2)
+    # Duplicated for now, but needs to be replaced with pareto front
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_right',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+
+@on('automl_varimp')
+async def aml_varimp(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        value = 'automl_varimp',
         items=[
             ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
             ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
@@ -709,27 +823,6 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
             ui.text(f'Variable importance heatmap unavailable')
            ])
 
-
-    # Model Correlation Heatmap
-    try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot22'] = ui.image_card(
-            box='charts_right',
-            title="Model Correlation Heatmap Plot",
-            type="png",
-            image=get_image_from_matplotlib(mc_plot),
-        )
-    except Exception as e:
-        print(f'No model correlation heatmap found: {e}')
-        q.page['plot22'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Model correlation heatmap unavailable')
-           ])
-
-
     choices = []
     x = q.app.train_df.columns.to_list()
     x.remove(q.app.target)
@@ -742,15 +835,12 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
         ui.buttons([ui.button(name='select_column_pd', label='Foo Explain', primary=True)])
     ])
 
-
     # PD Plot
     try:
         train = h2o.H2OFrame(q.app.train_df)
         y = q.app.target
         if q.app.is_classification:
             train[y] = train[y].asfactor()
-
-        #col = list(q.app.train_df.columns)[1]
         col = q.args.column_pd[0]
 
         pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = col)
@@ -765,11 +855,6 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
         q.page['plot32'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Partial Dependence Multi-model Plot unavailable')
            ])
-
-
-
-
-
 
 @app('/')
 async def serve(q: Q):
