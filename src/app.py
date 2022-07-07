@@ -614,23 +614,23 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
 
     # Model Correlation Heatmap (2)
     # Duplicated for now, but needs to be replaced with pareto front
-    try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot22'] = ui.image_card(
-            box='charts_right',
-            title="Model Correlation Heatmap Plot",
-            type="png",
-            image=get_image_from_matplotlib(mc_plot),
-        )
-    except Exception as e:
-        print(f'No model correlation heatmap found: {e}')
-        q.page['plot22'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Model correlation heatmap unavailable')
-           ])
+    #try:
+    #    train = h2o.H2OFrame(q.app.train_df)
+    #    y = q.app.target
+    #    if q.app.is_classification:
+    #        train[y] = train[y].asfactor()
+    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+    #    q.page['plot22'] = ui.image_card(
+    #        box='charts_right',
+    #        title="Model Correlation Heatmap Plot",
+    #        type="png",
+    #        image=get_image_from_matplotlib(mc_plot),
+    #    )
+    #except Exception as e:
+    #    print(f'No model correlation heatmap found: {e}')
+    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
+    #        ui.text(f'Model correlation heatmap unavailable')
+    #       ])
 
 
 # This is currently the same code as the aml_plots above
@@ -671,23 +671,23 @@ async def aml_summary(q: Q, arg=False, warning: str = ''):
 
     # Model Correlation Heatmap (2)
     # Duplicated for now, but needs to be replaced with pareto front
-    try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot22'] = ui.image_card(
-            box='charts_right',
-            title="Model Correlation Heatmap Plot",
-            type="png",
-            image=get_image_from_matplotlib(mc_plot),
-        )
-    except Exception as e:
-        print(f'No model correlation heatmap found: {e}')
-        q.page['plot22'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Model correlation heatmap unavailable')
-           ])
+    #try:
+    #    train = h2o.H2OFrame(q.app.train_df)
+    #    y = q.app.target
+    #    if q.app.is_classification:
+    #        train[y] = train[y].asfactor()
+    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+    #    q.page['plot22'] = ui.image_card(
+    #        box='charts_right',
+    #        title="Model Correlation Heatmap Plot",
+    #        type="png",
+    #        image=get_image_from_matplotlib(mc_plot),
+    #    )
+    #except Exception as e:
+    #    print(f'No model correlation heatmap found: {e}')
+    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
+    #        ui.text(f'Model correlation heatmap unavailable')
+    #       ])
 
 
 @on('automl_varimp')
@@ -726,11 +726,19 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
     if x:
         for col in x:
             choices.append(ui.choice(col, col))
-    print(choices)
-    q.page['plot31'] = ui.form_card(box='charts_left', items=[
-        ui.picker(name='column_pd', label='Picker', choices=choices, max_choices = 1),
-        ui.buttons([ui.button(name='select_column_pd', label='Foo Explain', primary=True)])
-    ])
+
+    if q.args.column_pd is not None:
+        col = q.args.column_pd[0]
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
+            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+        ])
+    else:
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
+            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+        ])
+
 
     # PD Plot
     try:
@@ -738,7 +746,15 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
         y = q.app.target
         if q.app.is_classification:
             train[y] = train[y].asfactor()
-        col = q.args.column_pd[0]
+
+
+        if q.args.column_pd is not None:
+            col = q.args.column_pd[0]
+        else:
+            m = q.app.aml.get_best_model(algorithm="basemodel")
+            vi = m.varimp()
+            col = vi[0][0]
+
 
         pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = col)
         q.page['plot32'] = ui.image_card(
@@ -765,23 +781,29 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
         for model_id in models_list:
             choices.append(ui.choice(model_id, model_id))
     print(choices)
-    q.page['main'] = ui.form_card(box='body_main', items=[
-        ui.picker(name='model_picker', label='Picker', choices=choices, max_choices = 1),
-        ui.buttons([ui.button(name='select_model', label='Foo Explain', primary=True)])
-    ])
+    if q.args.model_picker is not None:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+        ])
+    else:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").model_id]),
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+        ])
     # TO DO: actually do something when the user clicks on the button
     # - create the plots using that particular model
 
 
-    # Variable importance plot
-    try:
-        #model_str = "foo"  #this is what we get in the picker
-        #model = h2o.get_model(model_str)
-        # after ^^ this code works, comment out the two lines below
-        model_str = "foo"
-        model = q.app.aml.get_best_model(algorithm="xgboost")
+    if q.args.model_picker is not None:
         model_str = q.args.model_picker[0]
         model = h2o.get_model(q.args.model_picker[0])
+    else:
+        model = q.app.aml.get_best_model(algorithm="basemodel")
+        model_str = "Model not found"
+
+    # Variable importance plot
+    try:
         varimp_plot = model.varimp_plot(server = True)
         q.page['plot21'] = ui.image_card(
             box='charts_left',
@@ -798,9 +820,6 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     # Shapley Summary Plot
     try:
-        model_str = q.args.model_picker[0]
-        model = h2o.get_model(q.args.model_picker[0])
-
         train = h2o.H2OFrame(q.app.train_df)
         y = q.app.target
         if q.app.is_classification:
@@ -821,8 +840,6 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     #Learning Curve Plot
     try:
-        model_str = q.args.model_picker[0]
-        model = h2o.get_model(q.args.model_picker[0])
         learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
         q.page['plot31'] = ui.image_card(
             box='charts_left',
