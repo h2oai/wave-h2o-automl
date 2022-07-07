@@ -25,7 +25,7 @@ def init_app(q: Q):
             breakpoint='300px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -47,7 +47,7 @@ def init_app(q: Q):
             breakpoint='600px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -69,7 +69,7 @@ def init_app(q: Q):
             breakpoint='1000px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -91,7 +91,7 @@ def init_app(q: Q):
             breakpoint='1400px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -113,7 +113,7 @@ def init_app(q: Q):
             breakpoint='1700px',
             zones=[
                 ui.zone('header', direction=ui.ZoneDirection.ROW),
-                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='60px', zones=[
+                ui.zone('nav', direction=ui.ZoneDirection.ROW, size='90px', zones=[
                     ui.zone(name='tabs'),
                     ui.zone(name='misc'),
                 ]),
@@ -176,6 +176,8 @@ async def main_menu(q: Q):
             ui.tab(name="import", label="Import Data",  icon="Database"),
             ui.tab(name="train", label="Train",  icon="BullseyeTarget"),
             ui.tab(name="lb", label="Leaderboard", icon="ClipboardList"),
+            ui.tab(name="explain", label="AutoML Viz", icon="ClipboardList"),
+            ui.tab(name="explain2", label="Model Explain", icon="ClipboardList"),
         ],
         link=True
     )
@@ -242,7 +244,7 @@ async def select_table(q: Q, arg=False, warning: str = ''):
     if uploaded_files_dict:
         for file in uploaded_files_dict:
             choices.append(ui.choice(file, file))
-        q.page['main'] = ui.form_card(box='body_main', items=[
+        q.page['main'] = ui.form_card(box= ui.box('body_main', width='500px'), items=[
             ui.message_bar(type='warning', text=warning),
             ui.dropdown(name='train_file', label='Training data', value=q.app.train_file, required=True,
                         choices=choices),
@@ -251,7 +253,7 @@ async def select_table(q: Q, arg=False, warning: str = ''):
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
     else:
-        q.page['main'] = ui.form_card(box='body_main', items=[
+        q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
             ui.text_xl(f'{q.app.task}'),
             ui.message_bar(type='warning', text=warning),
             ui.text(f'No data found. Please import data first.'),
@@ -298,7 +300,7 @@ async def train_menu(q: Q, warning: str = ''):
                   'misclassification', 'mean_per_class_error']
     es_metrics_choices = [ui.choice(i, i) for i in es_metrics]
     choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
-    q.page['main'] = ui.form_card(box='body_main', items=[
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
         ui.text_xl(f'Training Options'),
         ui.message_bar(type='warning', text=warning),
         ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
@@ -367,7 +369,7 @@ async def train_model(q: Q):
     if q.app.is_classification:
         train[y] = train[y].asfactor()
 
-    # Run AutoML for 20 base models (limited to 1 hour max runtime by default)
+    # Run AutoML (limited to 1 hour max runtime by default)
     max_runtime_secs = q.app.max_runtime_mins * 60
     aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
                     stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
@@ -442,13 +444,16 @@ async def show_lb(q: Q):
 
 # Clean cards
 async def clean_cards(q: Q):
-    cards_to_clean = ['plot1', 'plot21', 'plot22']
+    # TO DO: update this to clean new explain cards
+    cards_to_clean = ['main', 'plot1', 'plot21', 'plot22', 'plot31', 'plot32', 'foo']
     for card in cards_to_clean:
         del q.page[card]
 
 
 # Image from matplotlib object
 def get_image_from_matplotlib(matplotlib_obj):
+    if hasattr(matplotlib_obj, "figure"):
+        matplotlib_obj = matplotlib_obj.figure()
     buffer = io.BytesIO()
     matplotlib_obj.savefig(buffer, format="png")
     buffer.seek(0)
@@ -458,6 +463,9 @@ def get_image_from_matplotlib(matplotlib_obj):
 # Get MOJO for selected row in table
 @on('lb_table')
 async def get_mojo(q: Q):
+
+    await clean_cards(q)
+
     if q.args.lb_table:
         q.app.selected_model = q.args.lb_table[0]
     if not q.app.shap_row_index:
@@ -499,25 +507,42 @@ async def get_mojo(q: Q):
         ui.buttons([ui.button(name='back_lb', label='Back to Leaderboard', primary=True)])
     ])
 
-    # Variable importance plots
+    # Variable importance plot
     try:
-        var_imp_df = model.varimp(use_pandas=True)
-        sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
-        rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-        q.page.add('plot21', ui.plot_card(
+        varimp_plot = model.varimp_plot(server = True)
+        q.page['plot21'] = ui.image_card(
             box='charts_left',
-            title='Variable Importance Plot',
-            data=data('feature score', rows=rows),
-            plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
-                                  y_title='Feature', color='#33BBFF')])
-        ))
+            title="Variable Importance Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_plot),
+        )
     except Exception as e:
-        print(f'No var_imp found for {model_str}: {e}')
+        print(f'No variable importance found for {model_str}: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
             ui.text(f'Variable importance unavailable for **{model_str}**')
            ])
+
+    #try:
+    #    var_imp_df = model.varimp(use_pandas=True)
+    #    sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
+    #    rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
+    #    q.page.add('plot21', ui.plot_card(
+    #        box=ui.box('charts_left', height='300px'),
+    #        title='Variable Importance Plot',
+    #        data=data('feature score', rows=rows),
+    #        plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
+    #                              y_title='Feature', color='#33BBFF')])
+    #    ))
+    #except Exception as e:
+    #    print(f'No var_imp found for {model_str}: {e}')
+    #    q.page['plot21'] = ui.form_card(box='charts_left', items=[
+    #        ui.text(f'Variable importance unavailable for **{model_str}**')
+    #       ])
+
+
+    # SHAP plot
     try:
-        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index))
+        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index), figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot22'] = ui.image_card(
             box='charts_right',
             title="Shapley Plot",
@@ -529,6 +554,328 @@ async def get_mojo(q: Q):
         q.page['plot22'] = ui.form_card(box='charts_right', items=[
             ui.text(f'Shapley unavailable for **{model_str}**')
            ])
+    # Learning curve plots
+    # TO DO: why is this showing up on all the tabs?
+    try:
+        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+        q.page['plot31'] = ui.image_card(
+            box='charts_left',
+            title="Learning curve Plot",
+            type="png",
+            image=get_image_from_matplotlib(learning_curve_plot),
+        )
+    except Exception as e:
+        print(f'No Learning Curve found for {model_str}: {e}')
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Learning Curve unavailable for **{model_str}**')
+           ])
+
+
+
+
+
+
+
+#AutoML Level Plots Tab
+@on('explain')
+async def aml_plots(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        value = 'automl_summary',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
+
+    # Model Correlation Heatmap (1)
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+
+    # Model Correlation Heatmap (2)
+    # Duplicated for now, but needs to be replaced with pareto front
+    #try:
+    #    train = h2o.H2OFrame(q.app.train_df)
+    #    y = q.app.target
+    #    if q.app.is_classification:
+    #        train[y] = train[y].asfactor()
+    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+    #    q.page['plot22'] = ui.image_card(
+    #        box='charts_right',
+    #        title="Model Correlation Heatmap Plot",
+    #        type="png",
+    #        image=get_image_from_matplotlib(mc_plot),
+    #    )
+    #except Exception as e:
+    #    print(f'No model correlation heatmap found: {e}')
+    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
+    #        ui.text(f'Model correlation heatmap unavailable')
+    #       ])
+
+
+# This is currently the same code as the aml_plots above
+# we should use one function twice
+@on('automl_summary')
+async def aml_summary(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        value = 'automl_summary',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
+
+    # Model Correlation Heatmap (1)
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Model Correlation Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(mc_plot),
+        )
+    except Exception as e:
+        print(f'No model correlation heatmap found: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Model correlation heatmap unavailable')
+           ])
+
+    # Model Correlation Heatmap (2)
+    # Duplicated for now, but needs to be replaced with pareto front
+    #try:
+    #    train = h2o.H2OFrame(q.app.train_df)
+    #    y = q.app.target
+    #    if q.app.is_classification:
+    #        train[y] = train[y].asfactor()
+    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+    #    q.page['plot22'] = ui.image_card(
+    #        box='charts_right',
+    #        title="Model Correlation Heatmap Plot",
+    #        type="png",
+    #        image=get_image_from_matplotlib(mc_plot),
+    #    )
+    #except Exception as e:
+    #    print(f'No model correlation heatmap found: {e}')
+    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
+    #        ui.text(f'Model correlation heatmap unavailable')
+    #       ])
+
+
+@on('automl_varimp')
+async def aml_varimp(q: Q, arg=False, warning: str = ''):
+
+    await clean_cards(q)
+
+    q.page['main'] = ui.tab_card(
+        box='body_main',
+        value = 'automl_varimp',
+        items=[
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+        ],
+        link=True
+    )
+
+    # Variable Importance Heatmap
+    try:
+        varimp_heat_plot = q.app.aml.varimp_heatmap()
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Variable Importance Heatmap Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_heat_plot),
+        )
+    except Exception as e:
+        print(f'No variable importance heatmap found: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Variable importance heatmap unavailable')
+           ])
+
+    choices = []
+    x = q.app.train_df.columns.to_list()
+    x.remove(q.app.target)
+    if x:
+        for col in x:
+            choices.append(ui.choice(col, col))
+
+    if q.args.column_pd is not None:
+        col = q.args.column_pd[0]
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
+            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+        ])
+    else:
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
+            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+        ])
+
+
+    # PD Plot
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+
+
+        if q.args.column_pd is not None:
+            col = q.args.column_pd[0]
+        else:
+            m = q.app.aml.get_best_model(algorithm="basemodel")
+            vi = m.varimp()
+            col = vi[0][0]
+
+
+        pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = col)
+        q.page['plot32'] = ui.image_card(
+            box='charts_right',
+            title="Partial Dependence Multi-model Plot",
+            type="png",
+            image=get_image_from_matplotlib(pd_plot),
+        )
+    except Exception as e:
+        print(f'No Partial Dependence Multi-model Plot found: {e}')
+        q.page['plot32'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Partial Dependence Multi-model Plot unavailable')
+           ])
+
+
+
+# Menu for importing new datasets
+@on('explain2')
+async def picker_example(q: Q, arg=False, warning: str = ''):
+    await clean_cards(q)
+    choices = []
+    models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
+    if models_list:
+        for model_id in models_list:
+            choices.append(ui.choice(model_id, model_id))
+    print(choices)
+    if q.args.model_picker is not None:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+        ])
+    else:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").model_id]),
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+        ])
+    # TO DO: actually do something when the user clicks on the button
+    # - create the plots using that particular model
+
+
+    if q.args.model_picker is not None:
+        model_str = q.args.model_picker[0]
+        model = h2o.get_model(q.args.model_picker[0])
+    else:
+        model = q.app.aml.get_best_model(algorithm="basemodel")
+        model_str = "Model not found"
+
+    # Variable importance plot
+    try:
+        varimp_plot = model.varimp_plot(server = True)
+        q.page['plot21'] = ui.image_card(
+            box='charts_left',
+            title="Variable Importance Plot",
+            type="png",
+            image=get_image_from_matplotlib(varimp_plot),
+        )
+    except Exception as e:
+        print(f'No variable importance found for {model_str}: {e}')
+        q.page['plot21'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Variable importance unavailable for **{model_str}**')
+           ])
+
+
+    # Shapley Summary Plot
+    try:
+        train = h2o.H2OFrame(q.app.train_df)
+        y = q.app.target
+        if q.app.is_classification:
+            train[y] = train[y].asfactor()
+
+        shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot22'] = ui.image_card(
+            box='charts_right',
+            title="Shapley Summary Plot",
+            type="png",
+            image=get_image_from_matplotlib(shap_plot),
+        )
+    except Exception as e:
+        print(f'No shapley summary found for {model_str}: {e}')
+        q.page['plot22'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Shapley Summary unavailable for **{model_str}**')
+           ])
+
+    #Learning Curve Plot
+    try:
+        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+        q.page['plot31'] = ui.image_card(
+            box='charts_left',
+            title="Learning curve Plot",
+            type="png",
+            image=get_image_from_matplotlib(learning_curve_plot),
+        )
+    except Exception as e:
+        print(f'No Learning Curve found for {model_str}: {e}')
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Learning Curve unavailable for **{model_str}**')
+           ])
+
+# async def generate_explain_automl(q: Q):
+
+#     # TO DO: Figure out how to populate the group/automl level plots
+#     # - how to access the automl object from the other tab
+
+#     # Variable importance plot
+#     try:
+#         var_imp_df = model.varimp(use_pandas=True)
+#         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
+#         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
+#         q.page.add('foo', ui.plot_card(
+#             box='charts_left',
+#             title='Variable Importance Plot',
+#             data=data('feature score', rows=rows),
+#             plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
+#                                   y_title='Feature', color='#33BBFF')])
+#         ))
+#     except Exception as e:
+#         model_str = "foo"
+#         print(f'No var_imp found for {model_str}: {e}')
+#         q.page['foo'] = ui.form_card(box='charts_left', items=[
+#             ui.text(f'Variable importance unavailable for **{model_str}**')
+#            ])
 
 
 @app('/')
@@ -563,6 +910,11 @@ async def serve(q: Q):
         await train_model(q)
     elif q.args.shap_row_index and q.args.shap_row_index != q.app.shap_row_index:
         await get_mojo(q)
+    # User clicks explain tab
+    elif q.args.select_column_pd:
+        await aml_varimp(q)
+    elif q.args.select_model:
+        await picker_example(q)
     elif not await handle_on(q):
         await main_menu(q)
     await q.page.save()

@@ -1,6 +1,10 @@
 from h2o_wave import ui
 from collections import defaultdict
 import os
+import matplotlib
+
+matplotlib.rcParams['figure.dpi'] = 200 # make it nicer on high dpi screens
+FIGSIZE=(11, 5)
 
 uploaded_files_dict = defaultdict()
 # Card placements across the app
