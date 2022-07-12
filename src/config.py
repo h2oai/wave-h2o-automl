@@ -15,6 +15,9 @@ cur_dir = os.getcwd()
 uploaded_files_dict['credit_card_train.csv'] = [f'{cur_dir}/data/credit_card_train.csv']
 uploaded_files_dict['credit_card_test.csv'] = [f'{cur_dir}/data/credit_card_test.csv']
 
+uploaded_files_dict['wine_quality_train.csv'] = [f'{cur_dir}/data/wine_quality_train.csv']
+uploaded_files_dict['wine_quality_test.csv'] = [f'{cur_dir}/data/wine_quality_test.csv']
+
 class Configuration:
     """
     Configuration file Data Labeling
