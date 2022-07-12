@@ -274,26 +274,21 @@ async def train_menu(q: Q, warning: str = ''):
     # Store train/test file
     if q.args.train_file:
         q.app.train_file = q.args.train_file
+        train_path = uploaded_files_dict[q.app.train_file][0]
         # Check for data provided as part of app
-
-        filepath = uploaded_files_dict[q.app.train_file][0]
-        if filepath.startswith('data/'):
-            local_path = uploaded_files_dict[q.app.train_file][0]
+        if 'data/credit_card_train.csv' or 'data/wine_quality_train.csv' in train_path:
+            local_path = train_path
         else:
-            local_path = await q.site.download(filepath, '.')
-
-        if 'data/wine_quality_train.csv' in uploaded_files_dict[q.app.train_file][0]:
-            local_path = uploaded_files_dict[q.app.train_file][0]
-        else:
-            local_path = await q.site.download(uploaded_files_dict[q.app.train_file][0], '.')
+            local_path = await q.site.download(train_path, '.')
         q.app.train_df = pd.read_csv(local_path)
     if q.args.test_file:
         q.app.test_file = q.args.test_file
+        test_path = uploaded_files_dict[q.app.test_file][0]
         # Check for data provided as part of app
-        if 'data/wine_quality_test.csv' in uploaded_files_dict[q.app.test_file][0]:
-            local_path = uploaded_files_dict[q.app.test_file][0]
+        if 'data/credit_card_test.csv' or 'data/wine_quality_test.csv' in test_path:
+            local_path = test_path
         else:
-            local_path = await q.site.download(uploaded_files_dict[q.app.test_file][0], '.')
+            local_path = await q.site.download(test_path, '.')
         q.app.test_df = pd.read_csv(local_path)
     # Default options
     if not q.app.max_models:
