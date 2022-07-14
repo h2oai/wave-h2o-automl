@@ -726,6 +726,8 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
             ui.text(f'Variable importance heatmap unavailable')
            ])
 
+
+    #on right side now
     choices = []
     x = q.app.train_df.columns.to_list()
     x.remove(q.app.target)
