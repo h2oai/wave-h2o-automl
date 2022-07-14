@@ -726,6 +726,8 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
             ui.text(f'Variable importance heatmap unavailable')
            ])
 
+
+    #on right side now
     choices = []
     x = q.app.train_df.columns.to_list()
     x.remove(q.app.target)
@@ -735,12 +737,12 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
     if q.args.column_pd is not None:
         col = q.args.column_pd[0]
-        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+        q.page['plot31'] = ui.form_card(box='charts_right', items=[
             ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
             ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
         ])
     else:
-        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+        q.page['plot31'] = ui.form_card(box='charts_right', items=[
             ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
             ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
         ])
