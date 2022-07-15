@@ -606,7 +606,7 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
     # Variable Importance Heatmap
     try:
-        varimp_heat_plot = q.app.aml.varimp_heatmap()
+        varimp_heat_plot = q.app.aml.varimp_heatmap(figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot21'] = ui.image_card(
             box='charts_left',
             title="Variable Importance Heatmap Plot",
