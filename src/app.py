@@ -466,115 +466,8 @@ def get_image_from_matplotlib(matplotlib_obj):
     return base64.b64encode(buffer.read()).decode("utf-8")
 
 
-# Get MOJO for selected row in table
-@on('lb_table')
-async def get_mojo(q: Q):
-
-    await clean_cards(q)
-
-    if q.args.lb_table:
-        q.app.selected_model = q.args.lb_table[0]
-    if not q.app.shap_row_index:
-        q.app.shap_row_index = str(0)
-    if q.args.shap_row_index:
-        q.app.shap_row_index = q.args.shap_row_index
-
-    main_page = q.page['main']
-    main_page.items = [ui.progress(f'Generating model insights')]
-    await q.page.save()
-
-    model_index = int(q.app.selected_model)
-    # H2O automl object
-    aml = q.app.aml
-    # Get leaderboard
-    lb = aml.leaderboard
-    lb_df = lb.as_data_frame()
-
-    model_str = lb_df['model_id'].at[model_index]
-    model = h2o.get_model(model_str)
-    mojo_path = model.download_mojo(path=f'{q.app.tmp_dir}')
-
-    y = q.app.target
-
-    train = h2o.H2OFrame(q.app.train_df)
-    if q.app.test_file:
-        test = h2o.H2OFrame(q.app.test_df)
-        if q.app.is_classification:
-            test[y] = test[y].asfactor()
-
-    download_path, = await q.site.upload([mojo_path])
-    shap_choices = [ui.choice(str(i), str(i)) for i in range(min(10, q.app.train_df.shape[0]))]
-
-    q.page['main'] = ui.form_card(box='body_main', items=[
-        ui.text_l(f'**Model:** {model_str}'),
-        ui.text(f'[Download MOJO]({download_path})'),
-        ui.dropdown(name='shap_row_index', label='Select Row for Shapley Plot', value=q.app.shap_row_index,
-                    choices=shap_choices, trigger=True),
-        ui.buttons([ui.button(name='back_lb', label='Back to Leaderboard', primary=True)])
-    ])
-
-    # Variable importance plot
-    try:
-        varimp_plot = model.varimp_plot(server = True)
-        q.page['plot21'] = ui.image_card(
-            box='charts_left',
-            title="Variable Importance Plot",
-            type="png",
-            image=get_image_from_matplotlib(varimp_plot),
-        )
-    except Exception as e:
-        print(f'No variable importance found for {model_str}: {e}')
-        q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Variable importance unavailable for **{model_str}**')
-           ])
-
-    #try:
-    #    var_imp_df = model.varimp(use_pandas=True)
-    #    sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
-    #    rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-    #    q.page.add('plot21', ui.plot_card(
-    #        box=ui.box('charts_left', height='300px'),
-    #        title='Variable Importance Plot',
-    #        data=data('feature score', rows=rows),
-    #        plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
-    #                              y_title='Feature', color='#33BBFF')])
-    #    ))
-    #except Exception as e:
-    #    print(f'No var_imp found for {model_str}: {e}')
-    #    q.page['plot21'] = ui.form_card(box='charts_left', items=[
-    #        ui.text(f'Variable importance unavailable for **{model_str}**')
-    #       ])
 
 
-    # SHAP plot
-    try:
-        shap_plot = model.shap_explain_row_plot(frame=train, row_index=int(q.app.shap_row_index), figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot22'] = ui.image_card(
-            box='charts_right',
-            title="Shapley Plot",
-            type="png",
-            image=get_image_from_matplotlib(shap_plot),
-        )
-    except Exception as e:
-        print(f'No shap found for {model_str}: {e}')
-        q.page['plot22'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Shapley unavailable for **{model_str}**')
-           ])
-    # Learning curve plots
-    # TO DO: why is this showing up on all the tabs?
-    try:
-        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
-        q.page['plot31'] = ui.image_card(
-            box='charts_left',
-            title="Learning curve Plot",
-            type="png",
-            image=get_image_from_matplotlib(learning_curve_plot),
-        )
-    except Exception as e:
-        print(f'No Learning Curve found for {model_str}: {e}')
-        q.page['plot31'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Learning Curve unavailable for **{model_str}**')
-           ])
 
 
 
@@ -779,8 +672,10 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
 
 
-# Menu for importing new datasets
-@on('explain2')
+
+
+@on('lb_table')# Get MOJO for selected row in table
+@on('explain2')# Menu for importing new datasets
 async def picker_example(q: Q, arg=False, warning: str = ''):
     await clean_cards(q)
     choices = []
@@ -917,7 +812,7 @@ async def serve(q: Q):
     elif q.args.next_train:
         await train_model(q)
     elif q.args.shap_row_index and q.args.shap_row_index != q.app.shap_row_index:
-        await get_mojo(q)
+        await picker_example(q)
     # User clicks explain tab
     elif q.args.select_column_pd:
         await aml_varimp(q)
