@@ -279,7 +279,7 @@ async def train_menu(q: Q, warning: str = ''):
         q.app.train_file = q.args.train_file
         train_path = uploaded_files_dict[q.app.train_file][0]
         # Check for data provided as part of app
-        if 'data/credit_card_train.csv' or 'data/wine_quality_train.csv' in train_path:
+        if 'data/credit_card_train.csv' in train_path or 'data/wine_quality_train.csv' in train_path:
             local_path = train_path
         else:
             local_path = await q.site.download(train_path, '.')
@@ -288,7 +288,7 @@ async def train_menu(q: Q, warning: str = ''):
         q.app.test_file = q.args.test_file
         test_path = uploaded_files_dict[q.app.test_file][0]
         # Check for data provided as part of app
-        if 'data/credit_card_test.csv' or 'data/wine_quality_test.csv' in test_path:
+        if 'data/credit_card_test.csv' in test_path or 'data/wine_quality_test.csv' in test_path:
             local_path = test_path
         else:
             local_path = await q.site.download(test_path, '.')
