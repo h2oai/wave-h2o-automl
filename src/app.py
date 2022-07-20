@@ -198,19 +198,22 @@ async def main_menu(q: Q):
     )
 
     q.page['main'] = ui.form_card(box='body_main', items=[
-            ui.text(f"""
-<center><img width="240" height=240" src="{q.client.img_source}"></center>"""),
+            #ui.text(f"""
+#<center><img width="240" height=240" align="right" src="{q.client.img_source}"></center>"""),
             #ui.frame(content='<h2><center>H2O-3 AutoML</center></h2>', height='60px'),
             ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
             ui.text("""
 This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
-### **Features**:
-* **AutoML Training**: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets.<br>
-* **Leaderboard**: Visualizing the AML leaderboard.<br>
-* **Explainability**: Shows feature importance and row Shapley contributions. <br>
-* **Deployment**: Select a model for MOJO download.<br>
+<center><img width="400" height="400" align="right" src="https://docs.h2o.ai/h2o/latest-stable/h2o-docs/_images/h2o-automl-logo.jpg"></center>
+<h3><b> Features </b></h3>
+<ul>
+  <li> <b> AutoML Training</b>: Allows a user to train a model using H2O-3 AutoML on custom train/test datasets. </li>
+  <li> <b> Leaderboard</b>: Visualizing the AML leaderboard. </li>
+  <li> <b> Explainability</b>: Shows feature importance and row Shapley contributions. </li>
+  <li> <b> Deployment</b>: Select a model for MOJO download. </li>
+</ul>
+<p>Reference: <a href="https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html"> https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html </a> </p>
 
-Reference: https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html
             """),
         ])
     await q.page.save()
