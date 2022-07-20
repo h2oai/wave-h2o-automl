@@ -471,13 +471,6 @@ def get_image_from_matplotlib(matplotlib_obj):
 
 
 
-
-
-
-
-
-
-
 #AutoML Level Plots Tab
 @on('explain')
 async def aml_plots(q: Q, arg=False, warning: str = ''):
@@ -675,12 +668,30 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
 
 
-
-
-@on('lb_table')# Get MOJO for selected row in table
+@on('lb_table')# Triggered upon clicking model name in leaderboard
 @on('explain2')# Menu for importing new datasets
 async def picker_example(q: Q, arg=False, warning: str = ''):
     await clean_cards(q)
+
+
+    if q.args.model_picker is not None:
+        q.app.selected_model = q.args.model_picker[0]
+    else:
+        q.app.selected_model = q.app.aml.get_best_model(algorithm="basemodel").model_id
+
+
+    #main_page = q.page['main']
+    #main_page.items = [ui.progress(f'Generating model insights')]
+    #await q.page.save()
+
+
+    model_str = q.app.selected_model
+    model = h2o.get_model(model_str)
+    mojo_path = model.download_mojo(path=f'{q.app.tmp_dir}')
+
+    download_path, = await q.site.upload([mojo_path])
+
+
     choices = []
     models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
     if models_list:
@@ -690,23 +701,16 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
     if q.args.model_picker is not None:
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
-            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
+            ui.text(f'[Download MOJO]({download_path})')
         ])
     else:
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").model_id]),
-            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)])
+            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
+            ui.text(f'[Download MOJO]({download_path})')
         ])
-    # TO DO: actually do something when the user clicks on the button
-    # - create the plots using that particular model
 
-
-    if q.args.model_picker is not None:
-        model_str = q.args.model_picker[0]
-        model = h2o.get_model(q.args.model_picker[0])
-    else:
-        model = q.app.aml.get_best_model(algorithm="basemodel")
-        model_str = "Model not found"
 
     # Variable importance plot
     try:
