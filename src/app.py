@@ -493,12 +493,14 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
         y = q.app.target
         if q.app.is_classification:
             train[y] = train[y].asfactor()
-        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        if q.app.mc_plot is None:
+            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        #mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot21'] = ui.image_card(
             box='charts_left',
             title="Model Correlation Heatmap Plot",
             type="png",
-            image=get_image_from_matplotlib(mc_plot),
+            image=get_image_from_matplotlib(q.app.mc_plot),
         )
     except Exception as e:
         print(f'No model correlation heatmap found: {e}')
@@ -551,12 +553,14 @@ async def aml_summary(q: Q, arg=False, warning: str = ''):
         y = q.app.target
         if q.app.is_classification:
             train[y] = train[y].asfactor()
-        mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        if q.app.mc_plot is None:
+            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        #mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot21'] = ui.image_card(
             box='charts_left',
             title="Model Correlation Heatmap Plot",
             type="png",
-            image=get_image_from_matplotlib(mc_plot),
+            image=get_image_from_matplotlib(q.app.mc_plot),
         )
     except Exception as e:
         print(f'No model correlation heatmap found: {e}')
@@ -602,12 +606,13 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
     # Variable Importance Heatmap
     try:
-        varimp_heat_plot = q.app.aml.varimp_heatmap(figsize=(FIGSIZE[0], FIGSIZE[0]))
+        if q.app.varimp_heat_plot is None:
+            q.app.varimp_heat_plot = q.app.aml.varimp_heatmap(figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot21'] = ui.image_card(
             box='charts_left',
             title="Variable Importance Heatmap Plot",
             type="png",
-            image=get_image_from_matplotlib(varimp_heat_plot),
+            image=get_image_from_matplotlib(q.app.varimp_heat_plot),
         )
     except Exception as e:
         print(f'No variable importance heatmap found: {e}')
@@ -616,7 +621,7 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
            ])
 
 
-    #on right side now
+    #PD Picker
     choices = []
     x = q.app.train_df.columns.to_list()
     x.remove(q.app.target)
@@ -624,15 +629,22 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
         for col in x:
             choices.append(ui.choice(col, col))
 
-    if q.args.column_pd is not None:
-        col = q.args.column_pd[0]
-        q.page['plot31'] = ui.form_card(box='charts_right', items=[
-            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
-            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
-        ])
+    if q.args.column_pd is None:
+        if q.app.pd_plot is None:
+            #col = q.args.column_pd[0]
+            q.page['plot31'] = ui.form_card(box='charts_right', items=[
+                ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
+                ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+            ])
+        else:
+            #col = q.args.column_pd[0]
+            q.page['plot31'] = ui.form_card(box='charts_right', items=[
+                ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.pd_col]),
+                ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+            ])
     else:
         q.page['plot31'] = ui.form_card(box='charts_right', items=[
-            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
+            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
             ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
         ])
 
@@ -644,21 +656,34 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
         if q.app.is_classification:
             train[y] = train[y].asfactor()
 
+        #if q.app.pd_plot is None:
+            #q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0])
 
-        if q.args.column_pd is not None:
-            col = q.args.column_pd[0]
+
+        if q.args.column_pd is None:#go away and come back
+            if q.app.pd_plot is None:#plot doesn't exist, so use varimp
+                q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0])
+
         else:
-            m = q.app.aml.get_best_model(algorithm="basemodel")
-            vi = m.varimp()
-            col = vi[0][0]
+            col = q.args.column_pd[0]
+            q.app.pd_col = col
+            q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.pd_col)
 
 
-        pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = col)
+
+
+
+        #if q.app.pd_plot is None and q.app.pd_col is not col:
+            #q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.pd_col)
+
+
+
+
         q.page['plot32'] = ui.image_card(
             box='charts_right',
             title="Partial Dependence Multi-model Plot",
             type="png",
-            image=get_image_from_matplotlib(pd_plot),
+            image=get_image_from_matplotlib(q.app.pd_plot),
         )
     except Exception as e:
         print(f'No Partial Dependence Multi-model Plot found: {e}')
@@ -714,12 +739,18 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     # Variable importance plot
     try:
-        varimp_plot = model.varimp_plot(server = True)
+
+        if q.app.selected_model is None:#model not selected yet
+            if q.app.varimp_plot is None:#plot not generated yet
+                q.app.varimp_plot = model.varimp_plot(server = True)
+        else:#model has been selected, so use selected model (code above for q.app.selected_model)
+            q.app.varimp_plot = model.varimp_plot(server = True)
+
         q.page['plot21'] = ui.image_card(
             box='charts_left',
             title="Variable Importance Plot",
             type="png",
-            image=get_image_from_matplotlib(varimp_plot),
+            image=get_image_from_matplotlib(q.app.varimp_plot),
         )
     except Exception as e:
         print(f'No variable importance found for {model_str}: {e}')
@@ -735,12 +766,17 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
         if q.app.is_classification:
             train[y] = train[y].asfactor()
 
-        shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        if q.app.selected_model is None:
+            if q.app.shap_plot is None:
+                q.app.shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        else:
+            q.app.shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+
         q.page['plot22'] = ui.image_card(
             box='charts_right',
             title="Shapley Summary Plot",
             type="png",
-            image=get_image_from_matplotlib(shap_plot),
+            image=get_image_from_matplotlib(q.app.shap_plot),
         )
     except Exception as e:
         print(f'No shapley summary found for {model_str}: {e}')
@@ -750,12 +786,17 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     #Learning Curve Plot
     try:
-        learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+        if q.app.selected_model is None:
+            if q.app.learning_curve_plot is None:
+                q.app.learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+        else:
+            q.app.learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+
         q.page['plot31'] = ui.image_card(
             box='charts_left',
             title="Learning curve Plot",
             type="png",
-            image=get_image_from_matplotlib(learning_curve_plot),
+            image=get_image_from_matplotlib(q.app.learning_curve_plot),
         )
     except Exception as e:
         print(f'No Learning Curve found for {model_str}: {e}')
