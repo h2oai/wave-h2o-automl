@@ -740,10 +740,10 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
     # Variable importance plot
     try:
 
-        if q.app.selected_model is None:
-            if q.app.varimp_plot is None:
+        if q.app.selected_model is None:#model not selected yet
+            if q.app.varimp_plot is None:#plot not generated yet
                 q.app.varimp_plot = model.varimp_plot(server = True)
-        else:
+        else:#model has been selected, so use selected model (code above for q.app.selected_model)
             q.app.varimp_plot = model.varimp_plot(server = True)
 
         q.page['plot21'] = ui.image_card(
