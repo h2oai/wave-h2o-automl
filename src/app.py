@@ -296,6 +296,8 @@ async def train_menu(q: Q, warning: str = ''):
     # Default options
     if not q.app.max_models:
         q.app.max_models = 10
+    if not q.app.max_runtime_mins:
+        q.app.max_runtime_mins = 60
     if not q.app.is_classification:
         q.app.is_classification = True
     if not q.app.nfolds:
@@ -317,9 +319,9 @@ async def train_menu(q: Q, warning: str = ''):
         ui.toggle(name='is_classification', label='Classification', value=q.app.is_classification),
         ui.separator('Training Parameters'),
         #ui.slider(name='max_models', label='Max Models', value=q.app.max_models, min=2, step=1, max=512),
-        ui.spinbox(name='max_models', label='Max Models', value=q.app.max_models, min=2, max=512, step=1),
-        #ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_secs, min=1, step=1, max=1440),
-        ui.spinbox(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_secs, min=1, step=1, max=1440),
+        ui.spinbox(name='max_models', label='Max Models', value=q.app.max_models, min=2, max=5000, step=1),
+        #ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=1440),
+        ui.spinbox(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=480),
         ui.dropdown(name='es_metric', label='Early stopping metric', value=q.app.es_metric, required=True,
                     choices=es_metrics_choices),
         ui.textbox(name='es_rounds', label='Early stopping rounds', value=str(q.app.es_rounds)),
