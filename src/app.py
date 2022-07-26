@@ -312,12 +312,14 @@ async def train_menu(q: Q, warning: str = ''):
     q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
         ui.text_xl(f'Training Options'),
         ui.message_bar(type='warning', text=warning),
-        ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
+        #ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
+        ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=choices),
         ui.toggle(name='is_classification', label='Classification', value=q.app.is_classification),
         ui.separator('Training Parameters'),
-        ui.slider(name='max_models', label='Max Models', value=q.app.max_models, min=2, step=1, max=512),
-        ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_secs, min=1, step=1,
-                  max=1440),
+        #ui.slider(name='max_models', label='Max Models', value=q.app.max_models, min=2, step=1, max=512),
+        ui.spinbox(name='max_models', label='Max Models', value=q.app.max_models, min=2, max=512, step=1),
+        #ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_secs, min=1, step=1, max=1440),
+        ui.spinbox(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_secs, min=1, step=1, max=1440),
         ui.dropdown(name='es_metric', label='Early stopping metric', value=q.app.es_metric, required=True,
                     choices=es_metrics_choices),
         ui.textbox(name='es_rounds', label='Early stopping rounds', value=str(q.app.es_rounds)),
@@ -357,7 +359,7 @@ async def train_model(q: Q):
     q.app.nfolds = int(q.args.nfolds)
     q.app.is_classification = q.args.is_classification
 
-    y = q.app.target
+    y = q.app.target[0]
 
     main_page = q.page['main']
     main_page.items = [ui.progress(label='Training the model')]
@@ -372,7 +374,8 @@ async def train_model(q: Q):
 
     # Identify predictors and response
     x = train.columns
-    x.remove(y)
+    if y in x:
+        x.remove(y)
 
     # For binary classification, response should be a factor
     if q.app.is_classification:
@@ -439,7 +442,7 @@ async def show_lb(q: Q):
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
             ui.text(f'**Training shape:** {q.app.train_df.shape}'),
-            ui.text(f'**Target:** {q.app.target}'),
+            ui.text(f'**Target:** {(q.app.target)[0]}'),
             ui.text_m(f'**Select a model to get the MOJO**'),
             lb_table
         ])
@@ -624,7 +627,8 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
     #PD Picker
     choices = []
     x = q.app.train_df.columns.to_list()
-    x.remove(q.app.target)
+    if q.app.target in x:
+        x.remove(q.app.target)
     if x:
         for col in x:
             choices.append(ui.choice(col, col))
