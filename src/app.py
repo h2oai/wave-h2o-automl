@@ -404,7 +404,9 @@ def table_from_df(df: pd.DataFrame, table_name: str):
         label=str(x),
         sortable=True,  # Make column sortable
         filterable=True,  # Make column filterable
-        searchable=True  # Make column searchable
+        searchable=True,  # Make column searchable
+        min_width='100px',
+        max_width='150px'
     ) for x in df.columns.values]
     # Rows for the table
     rows = [ui.table_row(name=str(i), cells=[str(cell) for cell in row]) for i, row in df.iterrows()]
@@ -412,6 +414,7 @@ def table_from_df(df: pd.DataFrame, table_name: str):
              rows=rows,
              columns=columns,
              multiple=False,  # Allow multiple row selection
+             downloadable=True,
              height='400px')
     return table
 
@@ -441,13 +444,24 @@ async def show_lb(q: Q):
 
         lb_table = table_from_df(lb_df, 'lb_table')
 
+        if q.app.is_classification is True:
+            if len(q.app.aml.leader.max_per_class_error()) == 2:
+                q.app.task_type = 'Binary classification'
+            else:
+                q.app.task_type = 'Multiclass classification'
+        else:
+            q.app.task_type = 'Regression'
+
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
             ui.text(f'**Training shape:** {q.app.train_df.shape}'),
             ui.text(f'**Target:** {(q.app.target)[0]}'),
+            ui.text(f'**Task Type:** {(q.app.task_type)}'),
             ui.text_m(f'**Select a model to get the MOJO**'),
             lb_table
         ])
+
+
     else:
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
