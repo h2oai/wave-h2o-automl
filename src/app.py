@@ -2,6 +2,9 @@ import h2o
 from h2o.automl import H2OAutoML
 from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on
 from .config import *
+#from .utils import *
+from collections import defaultdict
+import requests
 import time
 import pandas as pd
 import asyncio
@@ -307,27 +310,82 @@ async def train_menu(q: Q, warning: str = ''):
     if not q.app.es_rounds:
         q.app.es_rounds = '3'
 
-    es_metrics = ['AUTO', 'deviance', 'logloss', 'MSE', 'RMSE', 'MAE', 'RMSLE', 'AUC', 'AUCPR', 'lift_top_group',
-                  'misclassification', 'mean_per_class_error']
-    es_metrics_choices = [ui.choice(i, i) for i in es_metrics]
-    choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
-    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
-        ui.text_xl(f'Training Options'),
-        ui.message_bar(type='warning', text=warning),
-        #ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
-        ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=choices),
-        ui.toggle(name='is_classification', label='Classification', value=q.app.is_classification),
-        ui.separator('Training Parameters'),
-        #ui.slider(name='max_models', label='Max Models', value=q.app.max_models, min=2, step=1, max=512),
-        ui.spinbox(name='max_models', label='Max Models', value=q.app.max_models, min=2, max=5000, step=1),
-        #ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=1440),
-        ui.spinbox(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=480),
-        ui.dropdown(name='es_metric', label='Early stopping metric', value=q.app.es_metric, required=True,
-                    choices=es_metrics_choices),
-        ui.textbox(name='es_rounds', label='Early stopping rounds', value=str(q.app.es_rounds)),
-        ui.textbox(name='nfolds', label='nfolds', value=str(q.app.nfolds)),
-        ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
-    ])
+    # For training interface
+    automl_build_spec = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildSpecV99").json()
+    automl_build_control = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildControlV99").json()
+    automl_input = requests.get(h2o.connection().base_url + "/3/Metadata/schemas/AutoMLInputV99").json()
+    automl_build_models = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildModelsV99").json()
+    automl_stopping_criteria = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLStoppingCriteriaV99").json()
+
+    values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
+    
+    def render_widget(field):
+        name = field["name"]
+        type_ = field["type"]
+        values = field["values"]
+        required = field["required"]
+        value = field["value"]
+        help = field["help"]
+        if type_ in ("string",):
+            return ui.textbox(name=name, label=name, required=required, value=value, tooltip=help)
+        elif type_ in ("float", "double", "int", "long"):
+            return ui.spinbox(name=name, label=name, value=value, tooltip=help)
+        elif type_ == "boolean":
+            return ui.toggle(name=name, label=name, value=value, tooltip=help)
+        elif type_ == "enum":
+            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+                            required=required, value=value, tooltip=help)
+        elif type_ == "enum[]" or type_ == "string[]":
+            return ui.picker(name=name, label=name, choices=[
+                ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
+            ], required=required, tooltip=help)
+        elif type_ == "Key<Frame>":
+            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+                            required=required, value=value, tooltip=help,
+                            error="TODO: put the correct possible values here. (frame names)"
+                            )
+        elif type_ == "VecSpecifier":
+            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+                            required=required, value=value, tooltip=help,
+                            error="TODO: put the correct possible values here. (column names)"
+                            )
+        else:
+            return ui.text(f"Parameter {name} has type >>{type_}<< which is not yet supported!")
+
+    fields = defaultdict(list)
+    for spec in [automl_build_spec, automl_build_control, automl_input, automl_build_models,
+                 automl_stopping_criteria]:
+        for f in spec["schemas"][0]["fields"]:
+            if f["name"].startswith("__"):
+                continue
+
+            # --------------------------------------------------------------------------------------
+            # COMMENT this block to see what other types are present but not supported {
+            if f["type"] not in ("string", "float", "double", "int", "long", "boolean", "enum",
+                                 "enum[]", "Key<Frame>", "VecSpecifier", "string[]"):
+                continue
+            # } ------------------------------------------------------------------------------------
+            fields[f["level"]].append(f)
+
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
+        items=[
+            ui.expander(name='expander', label='Critical', items=[
+                render_widget(f) for f in fields["critical"]
+            ], expanded=True),
+            ui.expander(name='expander', label='Secondary', items=[
+                render_widget(f) for f in fields["secondary"]
+            ]),
+            ui.expander(name='expander', label='Expert', items=[
+                render_widget(f) for f in fields["expert"]
+            ]),
+            ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
+        ],
+    )
+
 
 
 # Train progress
