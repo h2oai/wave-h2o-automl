@@ -404,7 +404,8 @@ def table_from_df(df: pd.DataFrame, table_name: str):
         label=str(x),
         sortable=True,  # Make column sortable
         filterable=True,  # Make column filterable
-        searchable=True  # Make column searchable
+        searchable=True,  # Make column searchable
+        max_width = '100px'
     ) for x in df.columns.values]
     # Rows for the table
     rows = [ui.table_row(name=str(i), cells=[str(cell) for cell in row]) for i, row in df.iterrows()]
