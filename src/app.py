@@ -322,7 +322,9 @@ async def train_menu(q: Q, warning: str = ''):
         h2o.connection().base_url + "/3/Metadata/schemas/AutoMLStoppingCriteriaV99").json()
 
     values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
-    
+    # TO DO: Let's get the response column working
+    choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
+
     def render_widget(field):
         name = field["name"]
         type_ = field["type"]
@@ -349,6 +351,7 @@ async def train_menu(q: Q, warning: str = ''):
                             error="TODO: put the correct possible values here. (frame names)"
                             )
         elif type_ == "VecSpecifier":
+            # Let's get the choices thing working, insert choices here
             return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
                             required=required, value=value, tooltip=help,
                             error="TODO: put the correct possible values here. (column names)"
@@ -371,8 +374,23 @@ async def train_menu(q: Q, warning: str = ''):
             # } ------------------------------------------------------------------------------------
             fields[f["level"]].append(f)
 
+    # Remove some fields from the data
+    # training_frame, validation_frame, leaderboard_frame
+    # TO DO : Remove these
+    # TO DO LATER: Move these to secondary: 
+    # 'distribution',
+    # 'tweedie_power',
+    # 'quantile_alpha',
+    # 'huber_alpha',
+    # 'custom_distribution_func',
+    # Also remove response_column because we will hardcode it
+    remove_critical = ['training_frame', 'validation_frame', 'blending_frame', 'leaderboard_frame']  #add others to remove
+    critical_list = [x for x in fields["critical"] if x['name'] not in remove_critical]
+
     q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
         items=[
+            # TO DO: Add target column
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=choices),
             ui.expander(name='expander', label='Critical', items=[
                 render_widget(f) for f in fields["critical"]
             ], expanded=True),
