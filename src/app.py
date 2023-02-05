@@ -323,7 +323,7 @@ async def train_menu(q: Q, warning: str = ''):
 
     values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
     # TO DO: Let's get the response column working
-    choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
+    train_columns = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
 
     def render_widget(field):
         name = field["name"]
@@ -390,7 +390,7 @@ async def train_menu(q: Q, warning: str = ''):
     q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
         items=[
             # TO DO: Add target column
-            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=choices),
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_columns),
             ui.expander(name='expander', label='Critical', items=[
                 render_widget(f) for f in fields["critical"]
             ], expanded=True),
@@ -717,6 +717,7 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
 
     #PD Picker
+    # Maybe update the 'choices' variable to be predictor_columns
     choices = []
     x = q.app.train_df.columns.to_list()
     if q.app.target in x:
@@ -812,7 +813,7 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     download_path, = await q.site.upload([mojo_path])
 
-
+    # TO DO: Rename 'choices' to 'models'
     choices = []
     models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
     if models_list:
