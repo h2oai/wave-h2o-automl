@@ -377,7 +377,7 @@ async def train_menu(q: Q, warning: str = ''):
     # Remove some fields from the data
     # training_frame, validation_frame, leaderboard_frame
     # TO DO : Remove these
-    # TO DO LATER: Move these to secondary: 
+    # TO DO LATER: Move these to secondary:
     # 'distribution',
     # 'tweedie_power',
     # 'quantile_alpha',
@@ -431,9 +431,11 @@ async def train_model(q: Q):
 
     q.app.target = q.args.target
     q.app.max_models = q.args.max_models
+    q.app.max_models = 2 #DELETE LATER
     q.app.max_runtime_mins = q.args.max_runtime_mins
     q.app.es_metric = q.args.es_metric
-    q.app.es_rounds = int(q.args.es_rounds)
+    #q.app.es_rounds = int(q.args.es_rounds)
+    q.app.es_rounds = 3
     q.app.nfolds = int(q.args.nfolds)
     q.app.is_classification = q.args.is_classification
 
@@ -460,6 +462,7 @@ async def train_model(q: Q):
         train[y] = train[y].asfactor()
 
     # Run AutoML (limited to 1 hour max runtime by default)
+    q.app.max_runtime_mins = 2 #DELETE LATER
     max_runtime_secs = q.app.max_runtime_mins * 60
     aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
                     stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
