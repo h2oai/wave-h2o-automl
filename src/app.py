@@ -203,7 +203,7 @@ async def main_menu(q: Q):
     q.page['main'] = ui.form_card(box='body_main', items=[
             #ui.text(f"""
 #<center><img width="240" height=240" align="right" src="{q.client.img_source}"></center>"""),
-            #ui.frame(content='<h2><center>H2O-3 AutoML</center></h2>', height='60px'),
+            #ui.frame(content='<h2><center>H2O AutoML</center></h2>', height='60px'),
             ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
             ui.text("""
 This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
@@ -321,9 +321,16 @@ async def train_menu(q: Q, warning: str = ''):
     automl_stopping_criteria = requests.get(
         h2o.connection().base_url + "/3/Metadata/schemas/AutoMLStoppingCriteriaV99").json()
 
-    values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
-    # TO DO: Let's get the response column working
-    train_columns = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
+    # TO DO: why can't we get rid of this...
+    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
+    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
+    #values_overrides = dict()
+
+
+    # to populate single column fields
+    train_columns = list(q.app.train_df.columns)
+    train_column_choices = [ui.choice(i, i) for i in train_columns]
+    values_overrides = dict(ignored_columns=train_columns)
 
     def render_widget(field):
         name = field["name"]
@@ -345,19 +352,25 @@ async def train_menu(q: Q, warning: str = ''):
             return ui.picker(name=name, label=name, choices=[
                 ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
             ], required=required, tooltip=help)
+        # Remove this elif because we don't want users to choose frames, we will do that in Train tab    
         elif type_ == "Key<Frame>":
             return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
                             required=required, value=value, tooltip=help,
                             error="TODO: put the correct possible values here. (frame names)"
                             )
         elif type_ == "VecSpecifier":
-            # Let's get the choices thing working, insert choices here
-            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
-                            required=required, value=value, tooltip=help,
-                            error="TODO: put the correct possible values here. (column names)"
+            # TO DO: Should this be a picker with at most 1 element, or a combobox since there could be a lot of columns...
+            #return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+            return ui.combobox(name=name, label=name, choices=train_columns,
+                            required=required, value=value, tooltip=help
                             )
+            #return ui.picker(name='target', label=name, choices=train_column_choices,
+            #                required=required, max_choices=1
+            #    )
         else:
-            return ui.text(f"Parameter {name} has type >>{type_}<< which is not yet supported!")
+            # This is no longer needed, we want to delete the frame params from the interface
+            #return ui.text(f"Parameter {name} has type >>{type_}<< which is not yet supported!")
+            return None
 
     fields = defaultdict(list)
     for spec in [automl_build_spec, automl_build_control, automl_input, automl_build_models,
@@ -384,22 +397,95 @@ async def train_menu(q: Q, warning: str = ''):
     # 'huber_alpha',
     # 'custom_distribution_func',
     # Also remove response_column because we will hardcode it
-    remove_critical = ['training_frame', 'validation_frame', 'blending_frame', 'leaderboard_frame']  #add others to remove
-    critical_list = [x for x in fields["critical"] if x['name'] not in remove_critical]
+    exclude_fields = ['training_frame', 'validation_frame', 'blending_frame', \
+        'leaderboard_frame', 'response_column', 'project_name', \
+        'include_algos', 'exclude_algos']  #add others to remove
+    critical_fields_list = [x for x in fields["critical"] if x['name'] not in exclude_fields]
+    secondary_fields_list = [x for x in fields["secondary"] if x['name'] not in exclude_fields]
+    expert_fields_list = [x for x in fields["expert"] if x['name'] not in exclude_fields]
+
+    # Hack because we are going to move these fields to secondary: 
+    # https://h2oai.atlassian.net/browse/PUBDEV-8789
+    # however, it would be nice to still work on older versions of H2O
+    # -- if distribution, tweedie_power, quantile_alpha, huber_alpha are in "critical", 
+    #  move them to secondary
+    # if we bump required version of h2o up, we could possibly remove this, but currently that's too restrictive
+    old_critical_field_names = ['distribution', 'tweedie_power', 'quantile_alpha', 'huber_alpha', 'custom_distribution_func']
+    # add old criticals to secondary
+    secondary_fields_list = secondary_fields_list + [x for x in critical_fields_list if x['name'] in old_critical_field_names]
+    critical_fields_list = [x for x in critical_fields_list if x['name'] not in old_critical_field_names]    
+
+    '''
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
+        items=[
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
+            ui.expander(name='expander', label='Critical', items=[
+                render_widget(f) for f in critical_fields_list
+            ], expanded=True),
+            ui.expander(name='expander', label='Secondary', items=[
+                render_widget(f) for f in secondary_fields_list
+            ]),
+            ui.expander(name='expander', label='Expert', items=[
+                render_widget(f) for f in expert_fields_list
+            ]),
+            ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
+        ],
+    )
+    '''
+
+
+
+    # Let's abandon the backend designations of critical, etc and make it more user friendly
+    # TO DO: combine all fields into a single list and work from there instead of using critical to make new lists, too messy!
+
+    data_fields = [x for x in secondary_fields_list if x['name'] in ['ignored_columns', 'fold_column', 'weights_column']]
+    data_fields = [data_fields[i] for i in [2, 0 , 1]]  #nicer custom ordering
+    secondary_fields_list = [x for x in secondary_fields_list if x not in data_fields]
+    algos = ['GLM', 'GBM', 'XGBoost', 'DRF', 'DeepLearning', 'StackedEnsemble']
+    algos_choices = [ui.choice(i, i) for i in algos]
+    #algos_fields_list = [x for x in secondary_fields_list if x['name']=='include_algos']
+    stopping_fields_names = ['max_models', 'max_runtime_secs', 'max_runtime_secs_per_model', \
+        'stopping_rounds', 'stopping_metric', 'stopping_tolerance']
+    stopping_fields = [x for x in secondary_fields_list if x['name'] in stopping_fields_names]
+    # now remove stopping fields from secondary
+    secondary_fields_list = [x for x in secondary_fields_list if x not in stopping_fields]
+    eval_fields_names = ['sort_metric']
+    eval_fields = [x for x in secondary_fields_list if x['name'] in eval_fields_names]
+    # now remove eval fields from secondary
+    secondary_fields_list = [x for x in secondary_fields_list if x not in eval_fields]
+
+    # Lastly lets just add the remaining expert params to the secondary and put them all in the same place for now
+    secondary_fields_list = secondary_fields_list + expert_fields_list
+
+
+    # TO DO: Removed 'Expert' section and rename as something else or just group with others
 
     q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
         items=[
-            # TO DO: Add target column
-            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_columns),
-            ui.expander(name='expander', label='Critical', items=[
-                render_widget(f) for f in fields["critical"]
-            ], expanded=True),
-            ui.expander(name='expander', label='Secondary', items=[
-                render_widget(f) for f in fields["secondary"]
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
+            # TO DO: Let's change the classification toggle to something better...
+            ui.toggle(name='is_classification', label='Classification', value=True),
+            ui.expander(name='expander', label='Data Parameters', items=[
+                render_widget(f) for f in data_fields
+            ], expanded=False),
+            # broken below
+            #ui.expander(name='expander', label='Algorithms', items=[
+            #    render_widget(f) for f in algos
+            #], expanded=True),
+            # TO DO: unhardcode ignored_columns, possibly make required=True
+            ui.picker(name='include_algos', label='Algorithms', values = algos, choices=algos_choices),
+            ui.expander(name='expander_stopping', label='Stopping Criteria', items=[
+                render_widget(f) for f in stopping_fields
             ]),
-            ui.expander(name='expander', label='Expert', items=[
-                render_widget(f) for f in fields["expert"]
+            ui.expander(name='expander_eval', label='Evaluation Criteria', items=[
+                render_widget(f) for f in eval_fields
+            ], expanded=False),               
+            ui.expander(name='expander_secondary', label='Advanced Options', items=[
+                render_widget(f) for f in secondary_fields_list
             ]),
+            #ui.expander(name='expander_expert', label='Expert', items=[
+            #    render_widget(f) for f in expert_fields_list
+            #]),
             ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
         ],
     )
@@ -431,7 +517,7 @@ async def train_model(q: Q):
 
     q.app.target = q.args.target
     q.app.max_models = q.args.max_models
-    q.app.max_models = 2 #DELETE LATER
+    #q.app.max_models = 10 # testing only -- DELETE LATER
     q.app.max_runtime_mins = q.args.max_runtime_mins
     q.app.es_metric = q.args.es_metric
     #q.app.es_rounds = int(q.args.es_rounds)
@@ -464,8 +550,10 @@ async def train_model(q: Q):
     # Run AutoML (limited to 1 hour max runtime by default)
     q.app.max_runtime_mins = 2 #DELETE LATER
     max_runtime_secs = q.app.max_runtime_mins * 60
+    # TO DO: pipe the parameters through, and handle the distribution parameter + dist auxillary params (turn into a dict)
     aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
                     stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
+    #aml = H2OAutoML(**param_dict)                
 
     future = asyncio.ensure_future(show_timer(q))
     with concurrent.futures.ThreadPoolExecutor() as pool:
@@ -524,7 +612,7 @@ async def show_lb(q: Q):
         lb_table = table_from_df(lb_df, 'lb_table')
 
         if q.app.is_classification is True:
-            if len(q.app.aml.leader.max_per_class_error()) == 2:
+            if len(q.app.aml.leader.max_per_class_error()[0]) == 2:
                 q.app.task_type = 'Binary classification'
             else:
                 q.app.task_type = 'Multiclass classification'
@@ -536,7 +624,7 @@ async def show_lb(q: Q):
             ui.text(f'**Training shape:** {q.app.train_df.shape}'),
             ui.text(f'**Target:** {(q.app.target)[0]}'),
             ui.text(f'**Task Type:** {(q.app.task_type)}'),
-            ui.text_m(f'**Select a model to get the MOJO**'),
+            ui.text_m(f'**Select a model to download the MOJO**'),
             lb_table
         ])
 
