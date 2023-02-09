@@ -1,6 +1,6 @@
 import h2o
 from h2o.automl import H2OAutoML
-from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on
+from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on, expando_to_dict
 from .config import *
 #from .utils import *
 from collections import defaultdict
@@ -296,6 +296,9 @@ async def train_menu(q: Q, warning: str = ''):
         else:
             local_path = await q.site.download(test_path, '.')
         q.app.test_df = pd.read_csv(local_path)
+
+    # I think these are probably being set below in the form input functions?
+    '''    
     # Default options
     if not q.app.max_models:
         q.app.max_models = 10
@@ -309,7 +312,9 @@ async def train_menu(q: Q, warning: str = ''):
         q.app.es_metric = 'AUTO'
     if not q.app.es_rounds:
         q.app.es_rounds = '3'
+    '''
 
+    # TO DO: Is this being used?
     # For training interface
     automl_build_spec = requests.get(
         h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildSpecV99").json()
@@ -352,7 +357,7 @@ async def train_menu(q: Q, warning: str = ''):
             return ui.picker(name=name, label=name, choices=[
                 ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
             ], required=required, tooltip=help)
-        # Remove this elif because we don't want users to choose frames, we will do that in Train tab    
+        # not needed     
         elif type_ == "Key<Frame>":
             return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
                             required=required, value=value, tooltip=help,
@@ -453,6 +458,8 @@ async def train_menu(q: Q, warning: str = ''):
     eval_fields = [x for x in secondary_fields_list if x['name'] in eval_fields_names]
     # now remove eval fields from secondary
     secondary_fields_list = [x for x in secondary_fields_list if x not in eval_fields]
+    # new remove custom_distribution_func from secondary (and put anything else that needs to be removed here)
+    secondary_fields_list = [x for x in secondary_fields_list if x not in ['custom_distribution_function']]
 
     # Lastly lets just add the remaining expert params to the secondary and put them all in the same place for now
     secondary_fields_list = secondary_fields_list + expert_fields_list
@@ -473,7 +480,7 @@ async def train_menu(q: Q, warning: str = ''):
             #    render_widget(f) for f in algos
             #], expanded=True),
             # TO DO: unhardcode ignored_columns, possibly make required=True
-            ui.picker(name='include_algos', label='Algorithms', values = algos, choices=algos_choices),
+            ui.picker(name='include_algos', label='Algorithms', values=algos, choices=algos_choices),
             ui.expander(name='expander_stopping', label='Stopping Criteria', items=[
                 render_widget(f) for f in stopping_fields
             ]),
@@ -483,19 +490,25 @@ async def train_menu(q: Q, warning: str = ''):
             ui.expander(name='expander_secondary', label='Advanced Options', items=[
                 render_widget(f) for f in secondary_fields_list
             ]),
+            # TO DO: look into why the preprocessing variable is not showing up here
+            # and maybe also just wait until we do improvements to target encoding for AutoML to enable this...
             #ui.expander(name='expander_expert', label='Expert', items=[
             #    render_widget(f) for f in expert_fields_list
             #]),
-            ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
+            ui.buttons([ui.button(name='next_train', label='Run AutoML', primary=True)])
         ],
     )
+
+    # Now let's copy all the q.args into a params dictionary so they are easier to use for training AutoML
+    q.app.input_params = dict()
+    q.app.input_params['max_models'] = q.args['max_models'] 
 
 
 
 # Train progress
 async def show_timer(q: Q):
     main_page = q.page['main']
-    max_runtime_secs = q.app.max_runtime_mins * 60
+    max_runtime_secs = q.args.max_runtime_secs
     for i in range(1, max_runtime_secs):
         pct_complete = int(np.ceil(i/max_runtime_secs * 100))
         main_page.items = [ui.progress(label='Training Progress', caption=f'{pct_complete}% complete', value=i / max_runtime_secs)]
@@ -504,8 +517,8 @@ async def show_timer(q: Q):
 
 
 # AML train
-def aml_train(aml, x, y, train):
-    aml.train(x=x, y=y, training_frame=train)
+def aml_train(aml, x, y, training_frame, fold_column, weights_column):
+    aml.train(x=x, y=y, training_frame=training_frame, fold_column=fold_column, weights_column=weights_column)
 
 
 # Train AML model
@@ -514,11 +527,11 @@ async def train_model(q: Q):
     if not q.args.target:
         await train_menu(q, 'Please select target column')
         return
-
+    # I think none of this is being used anymore... check then delete
     q.app.target = q.args.target
     q.app.max_models = q.args.max_models
     #q.app.max_models = 10 # testing only -- DELETE LATER
-    q.app.max_runtime_mins = q.args.max_runtime_mins
+    #q.app.max_runtime_mins = q.args.max_runtime_mins
     q.app.es_metric = q.args.es_metric
     #q.app.es_rounds = int(q.args.es_rounds)
     q.app.es_rounds = 3
@@ -547,17 +560,58 @@ async def train_model(q: Q):
     if q.app.is_classification:
         train[y] = train[y].asfactor()
 
-    # Run AutoML (limited to 1 hour max runtime by default)
-    q.app.max_runtime_mins = 2 #DELETE LATER
-    max_runtime_secs = q.app.max_runtime_mins * 60
-    # TO DO: pipe the parameters through, and handle the distribution parameter + dist auxillary params (turn into a dict)
-    aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
-                    stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
-    #aml = H2OAutoML(**param_dict)                
+    # Process user input (need to update this if we add more input fields in the future) 
+    # also should include ignore_columns but we won't use that since it's not in the Python API
+    automl_param_names = ['include_algos', \
+        'max_models', 'max_runtime_secs', 'max_runtime_secs_per_model', 'stopping_rounds', \
+        'stopping_metric', 'stopping_tolerance', 'sort_metric', 'nfolds', 'balance_classes', \
+        'exploitation_ratio', 'seed', 'distribution', 'max_after_balance_size', \
+        'keep_cross_validation_predictions', 'keep_cross_validation_models', \
+        'keep_cross_validation_fold_assignment', 'export_checkpoints_dir']
+
+    # Create a parameter dictionary
+    def process_params(p):
+        if p is None:
+            exit
+        elif p == "AUTO":
+            exit
+        else:
+            return p
+        
+    #param_vals = [p for p in input_params]
+
+    args_dict = expando_to_dict(q.args)
+    automl_params_dict = {k: args_dict[k] for k in automl_param_names}
+    # add max_runtime_secs because user input is in minutes
+    #automl_params_dict['max_runtime_secs'] = args_dict['max_runtime_mins'] * 60
+    # Use the ignore_columns to update the x argument below
+    if args_dict['ignored_columns'] is not None:
+        x = [col for col in x if x not in args_dict['ignored_columns']]
+
+    # Fix distribution if the extra params are set:
+    # 'tweedie_power', 'quantile_alpha',  'huber_alpha'
+    # TO DO: Probably also add some error checking to make sure that incompatible distribution params aren't set 
+    # Even better, make the form conditional such that tweedie_power will only show up if distribution = tweedie, for example...
+    print(automl_params_dict['distribution'])
+    if args_dict['distribution'] not in ["AUTO"]:
+        automl_params_dict['distribution'] = dict(type=args_dict['distribution'])
+        if args_dict['tweedie_power'] is not None:
+            automl_params_dict['distribution']['tweedie_power']=args_dict['tweedie_power']
+        if args_dict['quantile_alpha'] is not None:
+            automl_params_dict['distribution']['quantile_alpha']=args_dict['quantile_alpha']
+        if args_dict['huber_alpha'] is not None:
+            automl_params_dict['distribution']['huber_alpha']=args_dict['huber_alpha']
+    
+    # TO DO: do we still want to further process the input?  remove the ones that are not set by the user...
+
+
+
+    # Run AutoML (limited to 1 hour max runtime by default)           
+    aml = H2OAutoML(**automl_params_dict)                
 
     future = asyncio.ensure_future(show_timer(q))
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        await q.exec(pool, aml_train, aml, x, y, train)
+        await q.exec(pool, aml_train, aml, x, y, train, args_dict['fold_column'], args_dict['weights_column'])
     future.cancel()
     q.app.aml = aml
     await show_lb(q)
