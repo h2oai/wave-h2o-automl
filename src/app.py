@@ -13,6 +13,7 @@ import numpy as np
 import base64
 import io
 from loguru import logger
+from sys import maxsize
 
 h2o.init()
 app_config = Configuration()
@@ -344,10 +345,44 @@ async def train_menu(q: Q, warning: str = ''):
         required = field["required"]
         value = field["value"]
         help = field["help"]
-        if type_ in ("string",):
+        if type_ == "string":
             return ui.textbox(name=name, label=name, required=required, value=value, tooltip=help)
-        elif type_ in ("float", "double", "int", "long"):
-            return ui.spinbox(name=name, label=name, value=value, tooltip=help)
+        elif type_ == "int":
+            if name == "nfolds":
+                value = 5
+                min = 0
+                max = 20
+            elif name == "stopping_rounds":
+                min = 0
+                max = 20
+            else:
+                min = None
+                max = None
+            return ui.spinbox(name=name, label=name, value=value, tooltip=help, min=min, max=max)
+        elif type_ in ("float", "double", "long"):
+            step = 0.1
+            if name in ("exploitation_ratio", "quantile_alpha", "huber_alpha"):
+                min = 0.0
+                max = 1.0
+                if name == "exploitation_ratio":
+                    value = 0.0
+            elif name == "tweedie_power":
+                min = 1.0
+                max = 2.0
+            elif name == "stopping_tolerance":
+                value = None
+                min = 0.0
+                max = None
+                step = 0.001
+            elif name == "seed":
+                value = -1
+                min = None
+                max = maxsize
+                step = 1
+            else:
+                min = None
+                max = None
+            return ui.spinbox(name=name, label=name, value=value, tooltip=help, step=step, min=min, max=max)
         elif type_ == "boolean":
             return ui.toggle(name=name, label=name, value=value, tooltip=help)
         elif type_ == "enum":
@@ -498,10 +533,11 @@ async def train_menu(q: Q, warning: str = ''):
             ui.buttons([ui.button(name='next_train', label='Run AutoML', primary=True)])
         ],
     )
-
-    # Now let's copy all the q.args into a params dictionary so they are easier to use for training AutoML
-    q.app.input_params = dict()
-    q.app.input_params['max_models'] = q.args['max_models'] 
+    # print stuff
+    #for f in secondary_fields_list:
+    #    print("\n\n")
+    #    print(f)
+    #    print("\n\n")        
 
 
 
@@ -592,7 +628,7 @@ async def train_model(q: Q):
     # 'tweedie_power', 'quantile_alpha',  'huber_alpha'
     # TO DO: Probably also add some error checking to make sure that incompatible distribution params aren't set 
     # Even better, make the form conditional such that tweedie_power will only show up if distribution = tweedie, for example...
-    print(automl_params_dict['distribution'])
+    #print(automl_params_dict['distribution'])
     if args_dict['distribution'] not in ["AUTO"]:
         automl_params_dict['distribution'] = dict(type=args_dict['distribution'])
         if args_dict['tweedie_power'] is not None:
@@ -964,7 +1000,7 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
     if models_list:
         for model_id in models_list:
             choices.append(ui.choice(model_id, model_id))
-    print(choices)
+    #print(choices)
     if q.args.model_picker is not None:
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
