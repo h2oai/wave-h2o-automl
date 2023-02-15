@@ -1,7 +1,10 @@
 import h2o
 from h2o.automl import H2OAutoML
-from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on
+from h2o_wave import Q, ui, app, main, data, copy_expando, on, handle_on, expando_to_dict
 from .config import *
+#from .utils import *
+from collections import defaultdict
+import requests
 import time
 import pandas as pd
 import asyncio
@@ -10,6 +13,7 @@ import numpy as np
 import base64
 import io
 from loguru import logger
+from sys import maxsize
 
 h2o.init()
 app_config = Configuration()
@@ -200,7 +204,7 @@ async def main_menu(q: Q):
     q.page['main'] = ui.form_card(box='body_main', items=[
             #ui.text(f"""
 #<center><img width="240" height=240" align="right" src="{q.client.img_source}"></center>"""),
-            #ui.frame(content='<h2><center>H2O-3 AutoML</center></h2>', height='60px'),
+            #ui.frame(content='<h2><center>H2O AutoML</center></h2>', height='60px'),
             ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
             ui.text("""
 This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
@@ -293,6 +297,9 @@ async def train_menu(q: Q, warning: str = ''):
         else:
             local_path = await q.site.download(test_path, '.')
         q.app.test_df = pd.read_csv(local_path)
+
+    # I think these are probably being set below in the form input functions?
+    '''    
     # Default options
     if not q.app.max_models:
         q.app.max_models = 10
@@ -306,34 +313,238 @@ async def train_menu(q: Q, warning: str = ''):
         q.app.es_metric = 'AUTO'
     if not q.app.es_rounds:
         q.app.es_rounds = '3'
+    '''
 
-    es_metrics = ['AUTO', 'deviance', 'logloss', 'MSE', 'RMSE', 'MAE', 'RMSLE', 'AUC', 'AUCPR', 'lift_top_group',
-                  'misclassification', 'mean_per_class_error']
-    es_metrics_choices = [ui.choice(i, i) for i in es_metrics]
-    choices = [ui.choice(i, i) for i in list(q.app.train_df.columns)]
-    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'), items=[
-        ui.text_xl(f'Training Options'),
-        ui.message_bar(type='warning', text=warning),
-        #ui.dropdown(name='target', label='Target Column', value=q.app.target, required=True, choices=choices),
-        ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=choices),
-        ui.toggle(name='is_classification', label='Classification', value=q.app.is_classification),
-        ui.separator('Training Parameters'),
-        #ui.slider(name='max_models', label='Max Models', value=q.app.max_models, min=2, step=1, max=512),
-        ui.spinbox(name='max_models', label='Max Models', value=q.app.max_models, min=2, max=5000, step=1),
-        #ui.slider(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=1440),
-        ui.spinbox(name='max_runtime_mins', label='Max Runtime (minutes)', value=q.app.max_runtime_mins, min=1, step=1, max=480),
-        ui.dropdown(name='es_metric', label='Early stopping metric', value=q.app.es_metric, required=True,
-                    choices=es_metrics_choices),
-        ui.textbox(name='es_rounds', label='Early stopping rounds', value=str(q.app.es_rounds)),
-        ui.textbox(name='nfolds', label='nfolds', value=str(q.app.nfolds)),
-        ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
-    ])
+    # TO DO: Is this being used?
+    # For training interface
+    automl_build_spec = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildSpecV99").json()
+    automl_build_control = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildControlV99").json()
+    automl_input = requests.get(h2o.connection().base_url + "/3/Metadata/schemas/AutoMLInputV99").json()
+    automl_build_models = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildModelsV99").json()
+    automl_stopping_criteria = requests.get(
+        h2o.connection().base_url + "/3/Metadata/schemas/AutoMLStoppingCriteriaV99").json()
+
+    # TO DO: why can't we get rid of this...
+    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
+    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
+    #values_overrides = dict()
+
+
+    # to populate single column fields
+    train_columns = list(q.app.train_df.columns)
+    train_column_choices = [ui.choice(i, i) for i in train_columns]
+    values_overrides = dict(ignored_columns=train_columns)
+
+    def render_widget(field):
+        name = field["name"]
+        type_ = field["type"]
+        values = field["values"]
+        required = field["required"]
+        value = field["value"]
+        help = field["help"]
+        if type_ == "string":
+            return ui.textbox(name=name, label=name, required=required, value=value, tooltip=help)
+        elif type_ == "int":
+            if name == "nfolds":
+                value = 5
+                min = 0
+                max = 20
+            elif name == "stopping_rounds":
+                min = 0
+                max = 20
+            else:
+                min = None
+                max = None
+            return ui.spinbox(name=name, label=name, value=value, tooltip=help, min=min, max=max)
+        elif type_ in ("float", "double", "long"):
+            step = 0.1
+            if name in ("exploitation_ratio", "quantile_alpha", "huber_alpha"):
+                min = 0.0
+                max = 1.0
+                if name == "exploitation_ratio":
+                    value = 0.0
+            elif name == "tweedie_power":
+                min = 1.0
+                max = 2.0
+            elif name == "stopping_tolerance":
+                value = None
+                min = 0.0
+                max = None
+                step = 0.001
+            elif name == "seed":
+                value = -1
+                min = None
+                max = maxsize
+                step = 1
+            else:
+                min = None
+                max = None
+            return ui.spinbox(name=name, label=name, value=value, tooltip=help, step=step, min=min, max=max)
+        elif type_ == "boolean":
+            return ui.toggle(name=name, label=name, value=value, tooltip=help)
+        elif type_ == "enum":
+            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+                            required=required, value=value, tooltip=help)
+        elif type_ == "enum[]" or type_ == "string[]":
+            return ui.picker(name=name, label=name, choices=[
+                ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
+            ], required=required, tooltip=help)
+        # not needed     
+        elif type_ == "Key<Frame>":
+            return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+                            required=required, value=value, tooltip=help,
+                            error="TODO: put the correct possible values here. (frame names)"
+                            )
+        elif type_ == "VecSpecifier":
+            # TO DO: Should this be a picker with at most 1 element, or a combobox since there could be a lot of columns...
+            #return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
+            return ui.combobox(name=name, label=name, choices=train_columns,
+                            required=required, value=value, tooltip=help
+                            )
+            #return ui.picker(name='target', label=name, choices=train_column_choices,
+            #                required=required, max_choices=1
+            #    )
+        else:
+            # This is no longer needed, we want to delete the frame params from the interface
+            #return ui.text(f"Parameter {name} has type >>{type_}<< which is not yet supported!")
+            return None
+
+    fields = defaultdict(list)
+    for spec in [automl_build_spec, automl_build_control, automl_input, automl_build_models,
+                 automl_stopping_criteria]:
+        for f in spec["schemas"][0]["fields"]:
+            if f["name"].startswith("__"):
+                continue
+
+            # --------------------------------------------------------------------------------------
+            # COMMENT this block to see what other types are present but not supported {
+            if f["type"] not in ("string", "float", "double", "int", "long", "boolean", "enum",
+                                 "enum[]", "Key<Frame>", "VecSpecifier", "string[]"):
+                continue
+            # } ------------------------------------------------------------------------------------
+            fields[f["level"]].append(f)
+
+    # Remove some fields from the data
+    # training_frame, validation_frame, leaderboard_frame
+    # TO DO : Remove these
+    # TO DO LATER: Move these to secondary:
+    # 'distribution',
+    # 'tweedie_power',
+    # 'quantile_alpha',
+    # 'huber_alpha',
+    # 'custom_distribution_func',
+    # Also remove response_column because we will hardcode it
+    exclude_fields = ['training_frame', 'validation_frame', 'blending_frame', \
+        'leaderboard_frame', 'response_column', 'project_name', \
+        'include_algos', 'exclude_algos']  #add others to remove
+    critical_fields_list = [x for x in fields["critical"] if x['name'] not in exclude_fields]
+    secondary_fields_list = [x for x in fields["secondary"] if x['name'] not in exclude_fields]
+    expert_fields_list = [x for x in fields["expert"] if x['name'] not in exclude_fields]
+
+    # Hack because we are going to move these fields to secondary: 
+    # https://h2oai.atlassian.net/browse/PUBDEV-8789
+    # however, it would be nice to still work on older versions of H2O
+    # -- if distribution, tweedie_power, quantile_alpha, huber_alpha are in "critical", 
+    #  move them to secondary
+    # if we bump required version of h2o up, we could possibly remove this, but currently that's too restrictive
+    old_critical_field_names = ['distribution', 'tweedie_power', 'quantile_alpha', 'huber_alpha', 'custom_distribution_func']
+    # add old criticals to secondary
+    secondary_fields_list = secondary_fields_list + [x for x in critical_fields_list if x['name'] in old_critical_field_names]
+    critical_fields_list = [x for x in critical_fields_list if x['name'] not in old_critical_field_names]    
+
+    '''
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
+        items=[
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
+            ui.expander(name='expander', label='Critical', items=[
+                render_widget(f) for f in critical_fields_list
+            ], expanded=True),
+            ui.expander(name='expander', label='Secondary', items=[
+                render_widget(f) for f in secondary_fields_list
+            ]),
+            ui.expander(name='expander', label='Expert', items=[
+                render_widget(f) for f in expert_fields_list
+            ]),
+            ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
+        ],
+    )
+    '''
+
+
+
+    # Let's abandon the backend designations of critical, etc and make it more user friendly
+    # TO DO: combine all fields into a single list and work from there instead of using critical to make new lists, too messy!
+
+    data_fields = [x for x in secondary_fields_list if x['name'] in ['ignored_columns', 'fold_column', 'weights_column']]
+    data_fields = [data_fields[i] for i in [2, 0 , 1]]  #nicer custom ordering
+    secondary_fields_list = [x for x in secondary_fields_list if x not in data_fields]
+    algos = ['GLM', 'GBM', 'XGBoost', 'DRF', 'DeepLearning', 'StackedEnsemble']
+    algos_choices = [ui.choice(i, i) for i in algos]
+    #algos_fields_list = [x for x in secondary_fields_list if x['name']=='include_algos']
+    stopping_fields_names = ['max_models', 'max_runtime_secs', 'max_runtime_secs_per_model', \
+        'stopping_rounds', 'stopping_metric', 'stopping_tolerance']
+    stopping_fields = [x for x in secondary_fields_list if x['name'] in stopping_fields_names]
+    # now remove stopping fields from secondary
+    secondary_fields_list = [x for x in secondary_fields_list if x not in stopping_fields]
+    eval_fields_names = ['sort_metric']
+    eval_fields = [x for x in secondary_fields_list if x['name'] in eval_fields_names]
+    # now remove eval fields from secondary
+    secondary_fields_list = [x for x in secondary_fields_list if x not in eval_fields]
+    # new remove custom_distribution_func from secondary (and put anything else that needs to be removed here)
+    secondary_fields_list = [x for x in secondary_fields_list if x not in ['custom_distribution_function']]
+
+    # Lastly lets just add the remaining expert params to the secondary and put them all in the same place for now
+    secondary_fields_list = secondary_fields_list + expert_fields_list
+
+
+    # TO DO: Removed 'Expert' section and rename as something else or just group with others
+
+    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
+        items=[
+            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
+            # TO DO: Let's change the classification toggle to something better...
+            ui.toggle(name='is_classification', label='Classification', value=True),
+            ui.expander(name='expander', label='Data Parameters', items=[
+                render_widget(f) for f in data_fields
+            ], expanded=False),
+            # broken below
+            #ui.expander(name='expander', label='Algorithms', items=[
+            #    render_widget(f) for f in algos
+            #], expanded=True),
+            # TO DO: unhardcode ignored_columns, possibly make required=True
+            ui.picker(name='include_algos', label='Algorithms', values=algos, choices=algos_choices),
+            ui.expander(name='expander_stopping', label='Stopping Criteria', items=[
+                render_widget(f) for f in stopping_fields
+            ]),
+            ui.expander(name='expander_eval', label='Evaluation Criteria', items=[
+                render_widget(f) for f in eval_fields
+            ], expanded=False),               
+            ui.expander(name='expander_secondary', label='Advanced Options', items=[
+                render_widget(f) for f in secondary_fields_list
+            ]),
+            # TO DO: look into why the preprocessing variable is not showing up here
+            # and maybe also just wait until we do improvements to target encoding for AutoML to enable this...
+            #ui.expander(name='expander_expert', label='Expert', items=[
+            #    render_widget(f) for f in expert_fields_list
+            #]),
+            ui.buttons([ui.button(name='next_train', label='Run AutoML', primary=True)])
+        ],
+    )
+    # print stuff
+    #for f in secondary_fields_list:
+    #    print("\n\n")
+    #    print(f)
+    #    print("\n\n")        
+
 
 
 # Train progress
 async def show_timer(q: Q):
     main_page = q.page['main']
-    max_runtime_secs = q.app.max_runtime_mins * 60
+    max_runtime_secs = q.args.max_runtime_secs
     for i in range(1, max_runtime_secs):
         pct_complete = int(np.ceil(i/max_runtime_secs * 100))
         main_page.items = [ui.progress(label='Training Progress', caption=f'{pct_complete}% complete', value=i / max_runtime_secs)]
@@ -342,8 +553,8 @@ async def show_timer(q: Q):
 
 
 # AML train
-def aml_train(aml, x, y, train):
-    aml.train(x=x, y=y, training_frame=train)
+def aml_train(aml, x, y, training_frame, fold_column, weights_column):
+    aml.train(x=x, y=y, training_frame=training_frame, fold_column=fold_column, weights_column=weights_column)
 
 
 # Train AML model
@@ -352,12 +563,14 @@ async def train_model(q: Q):
     if not q.args.target:
         await train_menu(q, 'Please select target column')
         return
-
+    # I think none of this is being used anymore... check then delete
     q.app.target = q.args.target
     q.app.max_models = q.args.max_models
-    q.app.max_runtime_mins = q.args.max_runtime_mins
+    #q.app.max_models = 10 # testing only -- DELETE LATER
+    #q.app.max_runtime_mins = q.args.max_runtime_mins
     q.app.es_metric = q.args.es_metric
-    q.app.es_rounds = int(q.args.es_rounds)
+    #q.app.es_rounds = int(q.args.es_rounds)
+    q.app.es_rounds = 3
     q.app.nfolds = int(q.args.nfolds)
     q.app.is_classification = q.args.is_classification
 
@@ -383,14 +596,58 @@ async def train_model(q: Q):
     if q.app.is_classification:
         train[y] = train[y].asfactor()
 
-    # Run AutoML (limited to 1 hour max runtime by default)
-    max_runtime_secs = q.app.max_runtime_mins * 60
-    aml = H2OAutoML(max_models=q.app.max_models, max_runtime_secs=max_runtime_secs, nfolds=q.app.nfolds,
-                    stopping_metric=q.app.es_metric, stopping_rounds=q.app.es_rounds, seed=1)
+    # Process user input (need to update this if we add more input fields in the future) 
+    # also should include ignore_columns but we won't use that since it's not in the Python API
+    automl_param_names = ['include_algos', \
+        'max_models', 'max_runtime_secs', 'max_runtime_secs_per_model', 'stopping_rounds', \
+        'stopping_metric', 'stopping_tolerance', 'sort_metric', 'nfolds', 'balance_classes', \
+        'exploitation_ratio', 'seed', 'distribution', 'max_after_balance_size', \
+        'keep_cross_validation_predictions', 'keep_cross_validation_models', \
+        'keep_cross_validation_fold_assignment', 'export_checkpoints_dir']
+
+    # Create a parameter dictionary
+    def process_params(p):
+        if p is None:
+            exit
+        elif p == "AUTO":
+            exit
+        else:
+            return p
+        
+    #param_vals = [p for p in input_params]
+
+    args_dict = expando_to_dict(q.args)
+    automl_params_dict = {k: args_dict[k] for k in automl_param_names}
+    # add max_runtime_secs because user input is in minutes
+    #automl_params_dict['max_runtime_secs'] = args_dict['max_runtime_mins'] * 60
+    # Use the ignore_columns to update the x argument below
+    if args_dict['ignored_columns'] is not None:
+        x = [col for col in x if x not in args_dict['ignored_columns']]
+
+    # Fix distribution if the extra params are set:
+    # 'tweedie_power', 'quantile_alpha',  'huber_alpha'
+    # TO DO: Probably also add some error checking to make sure that incompatible distribution params aren't set 
+    # Even better, make the form conditional such that tweedie_power will only show up if distribution = tweedie, for example...
+    #print(automl_params_dict['distribution'])
+    if args_dict['distribution'] not in ["AUTO"]:
+        automl_params_dict['distribution'] = dict(type=args_dict['distribution'])
+        if args_dict['tweedie_power'] is not None:
+            automl_params_dict['distribution']['tweedie_power']=args_dict['tweedie_power']
+        if args_dict['quantile_alpha'] is not None:
+            automl_params_dict['distribution']['quantile_alpha']=args_dict['quantile_alpha']
+        if args_dict['huber_alpha'] is not None:
+            automl_params_dict['distribution']['huber_alpha']=args_dict['huber_alpha']
+    
+    # TO DO: do we still want to further process the input?  remove the ones that are not set by the user...
+
+
+
+    # Run AutoML (limited to 1 hour max runtime by default)           
+    aml = H2OAutoML(**automl_params_dict)                
 
     future = asyncio.ensure_future(show_timer(q))
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        await q.exec(pool, aml_train, aml, x, y, train)
+        await q.exec(pool, aml_train, aml, x, y, train, args_dict['fold_column'], args_dict['weights_column'])
     future.cancel()
     q.app.aml = aml
     await show_lb(q)
@@ -445,7 +702,7 @@ async def show_lb(q: Q):
         lb_table = table_from_df(lb_df, 'lb_table')
 
         if q.app.is_classification is True:
-            if len(q.app.aml.leader.max_per_class_error()) == 2:
+            if len(q.app.aml.leader.max_per_class_error()[0]) == 2:
                 q.app.task_type = 'Binary classification'
             else:
                 q.app.task_type = 'Multiclass classification'
@@ -457,7 +714,7 @@ async def show_lb(q: Q):
             ui.text(f'**Training shape:** {q.app.train_df.shape}'),
             ui.text(f'**Target:** {(q.app.target)[0]}'),
             ui.text(f'**Task Type:** {(q.app.task_type)}'),
-            ui.text_m(f'**Select a model to get the MOJO**'),
+            ui.text_m(f'**Select a model to download the MOJO**'),
             lb_table
         ])
 
@@ -641,6 +898,7 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
 
     #PD Picker
+    # Maybe update the 'choices' variable to be predictor_columns
     choices = []
     x = q.app.train_df.columns.to_list()
     if q.app.target in x:
@@ -736,13 +994,13 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     download_path, = await q.site.upload([mojo_path])
 
-
+    # TO DO: Rename 'choices' to 'models'
     choices = []
     models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
     if models_list:
         for model_id in models_list:
             choices.append(ui.choice(model_id, model_id))
-    print(choices)
+    #print(choices)
     if q.args.model_picker is not None:
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
