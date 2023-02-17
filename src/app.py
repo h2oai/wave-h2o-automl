@@ -563,7 +563,8 @@ async def train_model(q: Q):
     if not q.args.target:
         await train_menu(q, 'Please select target column')
         return
-    # I think none of this is being used anymore... check then delete
+    # I think some of this is being used anymore... check then delete
+    # (the target and is_classification is being used)
     q.app.target = q.args.target
     q.app.max_models = q.args.max_models
     #q.app.max_models = 10 # testing only -- DELETE LATER
@@ -581,20 +582,30 @@ async def train_model(q: Q):
     await q.page.save()
 
     # Import a sample binary outcome train/test set into H2O
-    train = h2o.H2OFrame(q.app.train_df)
     if q.app.test_file:
+        train = h2o.H2OFrame(q.app.train_df)
         test = h2o.H2OFrame(q.app.test_df)
+        # For binary classification, response should be a factor
         if q.app.is_classification:
+            train[y] = train[y].asfactor()
             test[y] = test[y].asfactor()
+    else:
+        # Otherwise we create a test file from the training file
+        csv_data = h2o.H2OFrame(q.app.train_df)
+        # For binary classification, response should be a factor
+        if q.app.is_classification:
+            csv_data[y] = csv_data[y].asfactor()
+        train, test = csv_data.split_frame(ratios = [0.8], seed=1)
+
+    # Store train and test to be used elsewhere
+    q.app.train = train
+    q.app.test = test           
 
     # Identify predictors and response
     x = train.columns
     if y in x:
         x.remove(y)
 
-    # For binary classification, response should be a factor
-    if q.app.is_classification:
-        train[y] = train[y].asfactor()
 
     # Process user input (need to update this if we add more input fields in the future) 
     # also should include ignore_columns but we won't use that since it's not in the Python API
@@ -730,7 +741,7 @@ async def show_lb(q: Q):
 # Clean cards
 async def clean_cards(q: Q):
     # TO DO: update this to clean new explain cards
-    cards_to_clean = ['main', 'plot1', 'plot21', 'plot22', 'plot31', 'plot32', 'foo']
+    cards_to_clean = ['main', 'plot1', 'plot21', 'plot22', 'plot31', 'plot32', 'foo', 'plot_pareto_front']
     for card in cards_to_clean:
         del q.page[card]
 
@@ -757,53 +768,42 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
         box='body_main',
         value = 'automl_summary',
         items=[
-            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
-            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),  # model correlation + pareto front
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"), # varimp heatmap + PD plot + picker
         ],
         link=True
     )
 
-    # Model Correlation Heatmap (1)
+    # Pareto Front Plot
     try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-        if q.app.mc_plot is None:
-            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        #mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot21'] = ui.image_card(
+        q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot_pareto_front'] = ui.image_card(
             box='charts_left',
+            title="Pareto Front Plot",
+            type="png",
+            image=get_image_from_matplotlib(q.app.pf_plot),
+        )
+    except Exception as e:
+        print(f'No Pareto Front plot found: {e}')
+        q.page['plot_pareto_front'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Pareto Front plot currently unavailable')
+           ])
+
+    # Model Correlation Heatmap
+    try:
+        if q.app.mc_plot is None:
+            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot21'] = ui.image_card(
+            box='charts_right',
             title="Model Correlation Heatmap Plot",
             type="png",
             image=get_image_from_matplotlib(q.app.mc_plot),
         )
     except Exception as e:
-        print(f'No model correlation heatmap found: {e}')
+        print(f'No Model Correlation Heatmap found: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Model correlation heatmap unavailable')
+            ui.text(f'Model Correlation Heatmap currently unavailable')
            ])
-
-
-    # Model Correlation Heatmap (2)
-    # Duplicated for now, but needs to be replaced with pareto front
-    #try:
-    #    train = h2o.H2OFrame(q.app.train_df)
-    #    y = q.app.target
-    #    if q.app.is_classification:
-    #        train[y] = train[y].asfactor()
-    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-    #    q.page['plot22'] = ui.image_card(
-    #        box='charts_right',
-    #        title="Model Correlation Heatmap Plot",
-    #        type="png",
-    #        image=get_image_from_matplotlib(mc_plot),
-    #    )
-    #except Exception as e:
-    #    print(f'No model correlation heatmap found: {e}')
-    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
-    #        ui.text(f'Model correlation heatmap unavailable')
-    #       ])
 
 
 # This is currently the same code as the aml_plots above
