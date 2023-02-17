@@ -276,8 +276,6 @@ async def train_menu(q: Q, warning: str = ''):
         return
 
 
-
-
     # Store train/test file
     if q.args.train_file:
         q.app.train_file = q.args.train_file
@@ -553,8 +551,9 @@ async def show_timer(q: Q):
 
 
 # AML train
-def aml_train(aml, x, y, training_frame, fold_column, weights_column):
-    aml.train(x=x, y=y, training_frame=training_frame, fold_column=fold_column, weights_column=weights_column)
+# We currently always use a test set for the leaderboard... should we use/show the CV leaderboard instead?
+def aml_train(aml, x, y, training_frame, test_frame, fold_column, weights_column):
+    aml.train(x=x, y=y, training_frame=training_frame, leaderboard_frame=test_frame, fold_column=fold_column, weights_column=weights_column)
 
 
 # Train AML model
@@ -658,7 +657,7 @@ async def train_model(q: Q):
 
     future = asyncio.ensure_future(show_timer(q))
     with concurrent.futures.ThreadPoolExecutor() as pool:
-        await q.exec(pool, aml_train, aml, x, y, train, args_dict['fold_column'], args_dict['weights_column'])
+        await q.exec(pool, aml_train, aml, x, y, train, test, args_dict['fold_column'], args_dict['weights_column'])
     future.cancel()
     q.app.aml = aml
     await show_lb(q)
@@ -696,11 +695,10 @@ async def show_lb(q: Q):
         aml = q.app.aml
 
         # Get leaderboard
-        #lb = aml.leaderboard
         lb = h2o.automl.get_leaderboard(aml, extra_columns = "ALL")
         lb_df = lb.as_data_frame()
 
-        #round data to 5 decimal places
+        # Round data to 5 decimal places
         cols = lb_df.columns.to_list()
         cols.remove('model_id')
         cols.remove('training_time_ms')
@@ -709,9 +707,10 @@ async def show_lb(q: Q):
         for col in cols:
             lb_df[col] = lb_df[col].round(5)
 
-
+        # Generate the leaderboard table
         lb_table = table_from_df(lb_df, 'lb_table')
 
+        # Determine task type
         if q.app.is_classification is True:
             if len(q.app.aml.leader.max_per_class_error()[0]) == 2:
                 q.app.task_type = 'Binary classification'
@@ -722,7 +721,8 @@ async def show_lb(q: Q):
 
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
-            ui.text(f'**Training shape:** {q.app.train_df.shape}'),
+            #ui.text(f'**Test Data shape:** {q.app.train_df.shape}'),
+            ui.text(f'**Test Data size (rows):** {q.app.test.shape[0]}'),
             ui.text(f'**Target:** {(q.app.target)[0]}'),
             ui.text(f'**Task Type:** {(q.app.task_type)}'),
             ui.text_m(f'**Select a model to download the MOJO**'),
@@ -776,7 +776,7 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
 
     # Pareto Front Plot
     try:
-        q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot_pareto_front'] = ui.image_card(
             box='charts_left',
             title="Pareto Front Plot",
@@ -792,7 +792,7 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
     # Model Correlation Heatmap
     try:
         if q.app.mc_plot is None:
-            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
         q.page['plot21'] = ui.image_card(
             box='charts_right',
             title="Model Correlation Heatmap Plot",
@@ -817,52 +817,42 @@ async def aml_summary(q: Q, arg=False, warning: str = ''):
         box='body_main',
         value = 'automl_summary',
         items=[
-            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),#model correlation + pareto front (to do)
-            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"),#varimp heatmap + PD plot + picker
+            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),  # model correlation + pareto front
+            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"), # varimp heatmap + PD plot + picker
         ],
         link=True
     )
 
-    # Model Correlation Heatmap (1)
+    # Pareto Front Plot
     try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-        if q.app.mc_plot is None:
-            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        #mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot21'] = ui.image_card(
+        q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot_pareto_front'] = ui.image_card(
             box='charts_left',
+            title="Pareto Front Plot",
+            type="png",
+            image=get_image_from_matplotlib(q.app.pf_plot),
+        )
+    except Exception as e:
+        print(f'No Pareto Front plot found: {e}')
+        q.page['plot_pareto_front'] = ui.form_card(box='charts_right', items=[
+            ui.text(f'Pareto Front plot currently unavailable')
+           ])
+
+    # Model Correlation Heatmap
+    try:
+        if q.app.mc_plot is None:
+            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
+        q.page['plot21'] = ui.image_card(
+            box='charts_right',
             title="Model Correlation Heatmap Plot",
             type="png",
             image=get_image_from_matplotlib(q.app.mc_plot),
         )
     except Exception as e:
-        print(f'No model correlation heatmap found: {e}')
+        print(f'No Model Correlation Heatmap found: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Model correlation heatmap unavailable')
+            ui.text(f'Model Correlation Heatmap currently unavailable')
            ])
-
-    # Model Correlation Heatmap (2)
-    # Duplicated for now, but needs to be replaced with pareto front
-    #try:
-    #    train = h2o.H2OFrame(q.app.train_df)
-    #    y = q.app.target
-    #    if q.app.is_classification:
-    #        train[y] = train[y].asfactor()
-    #    mc_plot = q.app.aml.model_correlation_heatmap(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
-    #    q.page['plot22'] = ui.image_card(
-    #        box='charts_right',
-    #        title="Model Correlation Heatmap Plot",
-    #        type="png",
-    #        image=get_image_from_matplotlib(mc_plot),
-    #    )
-    #except Exception as e:
-    #    print(f'No model correlation heatmap found: {e}')
-    #    q.page['plot22'] = ui.form_card(box='charts_right', items=[
-    #        ui.text(f'Model correlation heatmap unavailable')
-    #       ])
 
 
 @on('automl_varimp')
@@ -929,33 +919,13 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 
     # PD Plot
     try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-
-        #if q.app.pd_plot is None:
-            #q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0])
-
-
-        if q.args.column_pd is None:#go away and come back
-            if q.app.pd_plot is None:#plot doesn't exist, so use varimp
-                q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0])
-
+        if q.args.column_pd is None: # go away and come back
+            if q.app.pd_plot is None: # plot doesn't exist, so use varimp
+                q.app.pd_plot = q.app.aml.pd_multi_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0])
         else:
             col = q.args.column_pd[0]
             q.app.pd_col = col
-            q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.pd_col)
-
-
-
-
-
-        #if q.app.pd_plot is None and q.app.pd_col is not col:
-            #q.app.pd_plot = q.app.aml.pd_multi_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.pd_col)
-
-
-
+            q.app.pd_plot = q.app.aml.pd_multi_plot(frame = q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]), column = q.app.pd_col)
 
         q.page['plot32'] = ui.image_card(
             box='charts_right',
@@ -1039,16 +1009,11 @@ async def picker_example(q: Q, arg=False, warning: str = ''):
 
     # Shapley Summary Plot
     try:
-        train = h2o.H2OFrame(q.app.train_df)
-        y = q.app.target
-        if q.app.is_classification:
-            train[y] = train[y].asfactor()
-
         if q.app.selected_model is None:
             if q.app.shap_plot is None:
-                q.app.shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+                q.app.shap_plot = model.shap_summary_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
         else:
-            q.app.shap_plot = model.shap_summary_plot(frame = train, figsize=(FIGSIZE[0], FIGSIZE[0]))
+            q.app.shap_plot = model.shap_summary_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
 
         q.page['plot22'] = ui.image_card(
             box='charts_right',
