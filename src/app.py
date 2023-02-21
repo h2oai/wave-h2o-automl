@@ -558,14 +558,17 @@ async def train_model(q: Q):
             exit
         else:
             return p
-        
+
+    # Update the x (predictor columns) argument if the user has selected columns to ignore    
     args_dict = expando_to_dict(q.args)
     automl_params_dict = {k: args_dict[k] for k in automl_param_names}
-    # add max_runtime_secs because user input is in minutes
-    #automl_params_dict['max_runtime_secs'] = args_dict['max_runtime_mins'] * 60
     # Use the ignore_columns to update the x argument below
     if args_dict['ignored_columns'] is not None:
-        x = [col for col in x if x not in args_dict['ignored_columns']]
+        #print("\n")
+        #print(args_dict['ignored_columns'])
+        x = [col for col in x if col not in args_dict['ignored_columns']]
+        #print(x)
+
 
     # Fix distribution if the extra params are set:
     # 'tweedie_power', 'quantile_alpha',  'huber_alpha'
@@ -587,7 +590,6 @@ async def train_model(q: Q):
 
     # Run AutoML (limited to 1 hour max runtime by default)           
     aml = H2OAutoML(**automl_params_dict)                
-
     future = asyncio.ensure_future(show_timer(q))
     with concurrent.futures.ThreadPoolExecutor() as pool:
         await q.exec(pool, aml_train, aml, x, y, train, test, args_dict['fold_column'], args_dict['weights_column'])
@@ -654,7 +656,6 @@ async def show_lb(q: Q):
 
         q.page['main'] = ui.form_card(box='body_main', items=[
             ui.text_xl('AutoML Leaderboard'),
-            #ui.text(f'**Test Data shape:** {q.app.train_df.shape}'),
             ui.text(f'**Test Data size (rows):** {q.app.test.shape[0]}'),
             ui.text(f'**Target:** {(q.app.target)[0]}'),
             ui.text(f'**Task Type:** {(q.app.task_type)}'),
