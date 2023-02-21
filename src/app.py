@@ -296,25 +296,8 @@ async def train_menu(q: Q, warning: str = ''):
             local_path = await q.site.download(test_path, '.')
         q.app.test_df = pd.read_csv(local_path)
 
-    # I think these are probably being set below in the form input functions?
-    '''    
-    # Default options
-    if not q.app.max_models:
-        q.app.max_models = 10
-    if not q.app.max_runtime_mins:
-        q.app.max_runtime_mins = 60
-    if not q.app.is_classification:
-        q.app.is_classification = True
-    if not q.app.nfolds:
-        q.app.nfolds = '5'
-    if not q.app.es_metric:
-        q.app.es_metric = 'AUTO'
-    if not q.app.es_rounds:
-        q.app.es_rounds = '3'
-    '''
 
-    # TO DO: Is this being used?
-    # For training interface
+    # Get metadata for AutoML fields
     automl_build_spec = requests.get(
         h2o.connection().base_url + "/3/Metadata/schemas/AutoMLBuildSpecV99").json()
     automl_build_control = requests.get(
@@ -325,18 +308,15 @@ async def train_menu(q: Q, warning: str = ''):
     automl_stopping_criteria = requests.get(
         h2o.connection().base_url + "/3/Metadata/schemas/AutoMLStoppingCriteriaV99").json()
 
-    # TO DO: why can't we get rid of this...
-    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
-    #values_overrides = dict(ignored_columns=["Sepal.length", "Petal.length", "Sepal.Width", "Petal.width"])
-    #values_overrides = dict()
-
 
     # to populate single column fields
     train_columns = list(q.app.train_df.columns)
     train_column_choices = [ui.choice(i, i) for i in train_columns]
-    values_overrides = dict(ignored_columns=train_columns)
+    values_overrides = dict(ignored_columns=train_columns, fold_column=train_columns, weights_column=train_columns)
 
     def render_widget(field):
+        #print(field)
+        #print("\n")
         name = field["name"]
         type_ = field["type"]
         values = field["values"]
@@ -386,6 +366,9 @@ async def train_menu(q: Q, warning: str = ''):
         elif type_ == "enum":
             return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
                             required=required, value=value, tooltip=help)
+            #return ui.picker(name=name, label=name, choices=[
+            #    ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
+            #], required=required, max_choices=1, tooltip=help)
         elif type_ == "enum[]" or type_ == "string[]":
             return ui.picker(name=name, label=name, choices=[
                 ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
@@ -399,12 +382,12 @@ async def train_menu(q: Q, warning: str = ''):
         elif type_ == "VecSpecifier":
             # TO DO: Should this be a picker with at most 1 element, or a combobox since there could be a lot of columns...
             #return ui.combobox(name=name, label=name, choices=values_overrides.get(name, values),
-            return ui.combobox(name=name, label=name, choices=train_columns,
-                            required=required, value=value, tooltip=help
-                            )
-            #return ui.picker(name='target', label=name, choices=train_column_choices,
-            #                required=required, max_choices=1
-            #    )
+            #return ui.combobox(name=name, label=name, choices=train_columns,
+            #                required=required, value=value, tooltip=help
+            #                )
+            return ui.picker(name=name, label=name, choices=[
+                ui.choice(name=v, label=v) for v in values_overrides.get(name, values)
+            ], required=required, max_choices=1, tooltip=help)            
         else:
             # This is no longer needed, we want to delete the frame params from the interface
             #return ui.text(f"Parameter {name} has type >>{type_}<< which is not yet supported!")
@@ -425,16 +408,7 @@ async def train_menu(q: Q, warning: str = ''):
             # } ------------------------------------------------------------------------------------
             fields[f["level"]].append(f)
 
-    # Remove some fields from the data
-    # training_frame, validation_frame, leaderboard_frame
-    # TO DO : Remove these
-    # TO DO LATER: Move these to secondary:
-    # 'distribution',
-    # 'tweedie_power',
-    # 'quantile_alpha',
-    # 'huber_alpha',
-    # 'custom_distribution_func',
-    # Also remove response_column because we will hardcode it
+    # Remove some data fields from the input fields because we will hardcode them
     exclude_fields = ['training_frame', 'validation_frame', 'blending_frame', \
         'leaderboard_frame', 'response_column', 'project_name', \
         'include_algos', 'exclude_algos']  #add others to remove
@@ -453,35 +427,14 @@ async def train_menu(q: Q, warning: str = ''):
     secondary_fields_list = secondary_fields_list + [x for x in critical_fields_list if x['name'] in old_critical_field_names]
     critical_fields_list = [x for x in critical_fields_list if x['name'] not in old_critical_field_names]    
 
-    '''
-    q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
-        items=[
-            ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
-            ui.expander(name='expander', label='Critical', items=[
-                render_widget(f) for f in critical_fields_list
-            ], expanded=True),
-            ui.expander(name='expander', label='Secondary', items=[
-                render_widget(f) for f in secondary_fields_list
-            ]),
-            ui.expander(name='expander', label='Expert', items=[
-                render_widget(f) for f in expert_fields_list
-            ]),
-            ui.buttons([ui.button(name='next_train', label='Next', primary=True)])
-        ],
-    )
-    '''
-
-
 
     # Let's abandon the backend designations of critical, etc and make it more user friendly
-    # TO DO: combine all fields into a single list and work from there instead of using critical to make new lists, too messy!
-
+    # TO DO: combine all fields into a single list and work from there instead of using critical to make new lists, this is too messy!
     data_fields = [x for x in secondary_fields_list if x['name'] in ['ignored_columns', 'fold_column', 'weights_column']]
     data_fields = [data_fields[i] for i in [2, 0 , 1]]  #nicer custom ordering
     secondary_fields_list = [x for x in secondary_fields_list if x not in data_fields]
     algos = ['GLM', 'GBM', 'XGBoost', 'DRF', 'DeepLearning', 'StackedEnsemble']
     algos_choices = [ui.choice(i, i) for i in algos]
-    #algos_fields_list = [x for x in secondary_fields_list if x['name']=='include_algos']
     stopping_fields_names = ['max_models', 'max_runtime_secs', 'max_runtime_secs_per_model', \
         'stopping_rounds', 'stopping_metric', 'stopping_tolerance']
     stopping_fields = [x for x in secondary_fields_list if x['name'] in stopping_fields_names]
@@ -493,27 +446,19 @@ async def train_menu(q: Q, warning: str = ''):
     secondary_fields_list = [x for x in secondary_fields_list if x not in eval_fields]
     # new remove custom_distribution_func from secondary (and put anything else that needs to be removed here)
     secondary_fields_list = [x for x in secondary_fields_list if x not in ['custom_distribution_function']]
-
     # Lastly lets just add the remaining expert params to the secondary and put them all in the same place for now
     secondary_fields_list = secondary_fields_list + expert_fields_list
 
-
-    # TO DO: Removed 'Expert' section and rename as something else or just group with others
-
+    # Now we can render the widgets in the main training form
     q.page['main'] = ui.form_card(box=ui.box('body_main', width='500px'),
         items=[
             ui.picker(name='target', label='Target Column', max_choices=1, required=True, choices=train_column_choices),
             # TO DO: Let's change the classification toggle to something better...
-            ui.toggle(name='is_classification', label='Classification', value=True),
+            ui.toggle(name='is_classification', label='Classification', value=True, tooltip='Turn off for regression'),
             ui.expander(name='expander', label='Data Parameters', items=[
                 render_widget(f) for f in data_fields
             ], expanded=False),
-            # broken below
-            #ui.expander(name='expander', label='Algorithms', items=[
-            #    render_widget(f) for f in algos
-            #], expanded=True),
-            # TO DO: unhardcode ignored_columns, possibly make required=True
-            ui.picker(name='include_algos', label='Algorithms', values=algos, choices=algos_choices),
+            ui.picker(name='include_algos', label='Algorithms', values=algos, choices=algos_choices, tooltip='Types of algorithms to include in AutoML'),
             ui.expander(name='expander_stopping', label='Stopping Criteria', items=[
                 render_widget(f) for f in stopping_fields
             ]),
@@ -525,9 +470,6 @@ async def train_menu(q: Q, warning: str = ''):
             ]),
             # TO DO: look into why the preprocessing variable is not showing up here
             # and maybe also just wait until we do improvements to target encoding for AutoML to enable this...
-            #ui.expander(name='expander_expert', label='Expert', items=[
-            #    render_widget(f) for f in expert_fields_list
-            #]),
             ui.buttons([ui.button(name='next_train', label='Run AutoML', primary=True)])
         ],
     )
@@ -565,13 +507,6 @@ async def train_model(q: Q):
     # I think some of this is being used anymore... check then delete
     # (the target and is_classification is being used)
     q.app.target = q.args.target
-    q.app.max_models = q.args.max_models
-    #q.app.max_models = 10 # testing only -- DELETE LATER
-    #q.app.max_runtime_mins = q.args.max_runtime_mins
-    q.app.es_metric = q.args.es_metric
-    #q.app.es_rounds = int(q.args.es_rounds)
-    q.app.es_rounds = 3
-    q.app.nfolds = int(q.args.nfolds)
     q.app.is_classification = q.args.is_classification
 
     y = q.app.target[0]
@@ -624,8 +559,6 @@ async def train_model(q: Q):
         else:
             return p
         
-    #param_vals = [p for p in input_params]
-
     args_dict = expando_to_dict(q.args)
     automl_params_dict = {k: args_dict[k] for k in automl_param_names}
     # add max_runtime_secs because user input is in minutes
