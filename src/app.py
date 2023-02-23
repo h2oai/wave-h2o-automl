@@ -255,8 +255,12 @@ async def select_table(q: Q, arg=False, warning: str = ''):
             ui.message_bar(type='warning', text=warning),
             ui.dropdown(name='train_file', label='Training data', value=q.app.train_file, required=True,
                         choices=choices),
-            ui.dropdown(name='test_file', label='Test data (optional)', value=q.args.test_file, required=False,
-                        choices=choices),
+            ui.spinbox(name='train_fraction_ratio', label='Train split fraction', value=0.80, min=0.01, max=1.0, step=0.01,
+                        tooltip='If the test data is not provided by the user, a fraction of the training set will be partitioned from the training set to create a test set to use for model explainability functions. The default split is 80/20 train/test.'),            
+            ui.spinbox(name='train_fraction_seed', label='Seed', value=1, min=0, max=maxsize, step=1,
+                        tooltip='Seed for train/test split (if applicable) to be used in train.split_frame(). Defaults to 1.'),
+            ui.dropdown(name='test_file', label='Test data (optional)', value=q.args.test_file, required=False, choices=choices,
+                        tooltip='Test data will be used to generate the Leaderboard and to generate all the model explainability plots.'),
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
     else:
@@ -286,6 +290,8 @@ async def train_menu(q: Q, warning: str = ''):
         else:
             local_path = await q.site.download(train_path, '.')
         q.app.train_df = pd.read_csv(local_path)
+        q.app.train_fraction_ratio = q.args.train_fraction_ratio
+        q.app.train_fraction_seed = q.args.train_fraction_seed
     if q.args.test_file:
         q.app.test_file = q.args.test_file
         test_path = uploaded_files_dict[q.app.test_file][0]
@@ -295,6 +301,7 @@ async def train_menu(q: Q, warning: str = ''):
         else:
             local_path = await q.site.download(test_path, '.')
         q.app.test_df = pd.read_csv(local_path)
+        # TO DO: if there's any way to disable the train fraction ratio and seed once test file is selected, let's do that
 
 
     # Get metadata for AutoML fields
@@ -529,7 +536,10 @@ async def train_model(q: Q):
         # For binary classification, response should be a factor
         if q.app.is_classification:
             csv_data[y] = csv_data[y].asfactor()
-        train, test = csv_data.split_frame(ratios = [0.8], seed=1)
+        #print(q.app.train_fraction_ratio)
+        #print("\n\n")
+        #print(q.app.train_fraction_seed)
+        train, test = csv_data.split_frame(ratios = [q.app.train_fraction_ratio], seed=q.app.train_fraction_seed)
 
     # Store train and test to be used elsewhere
     q.app.train = train
@@ -880,17 +890,10 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
 async def picker_example(q: Q, arg=False, warning: str = ''):
     await clean_cards(q)
 
-
     if q.args.model_picker is not None:
         q.app.selected_model = q.args.model_picker[0]
     else:
         q.app.selected_model = q.app.aml.get_best_model(algorithm="basemodel").model_id
-
-
-    #main_page = q.page['main']
-    #main_page.items = [ui.progress(f'Generating model insights')]
-    #await q.page.save()
-
 
     model_str = q.app.selected_model
     model = h2o.get_model(model_str)
