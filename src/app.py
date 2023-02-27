@@ -260,7 +260,7 @@ async def select_table(q: Q, arg=False, warning: str = ''):
             ui.spinbox(name='train_fraction_seed', label='Seed', value=1, min=0, max=maxsize, step=1,
                         tooltip='Seed for train/test split (if applicable) to be used in train.split_frame(). Defaults to 1.'),
             ui.dropdown(name='test_file', label='Test data (optional)', value=q.args.test_file, required=False, choices=choices,
-                        tooltip='Test data will be used to generate the Leaderboard and to generate all the model explainability plots.'),
+                        tooltip='Test data will be used to generate the Leaderboard metrics, and to generate all the model explainability plots.'),
             ui.buttons([ui.button(name='selected_tables_next', label='Next', primary=True)])
         ])
     else:
