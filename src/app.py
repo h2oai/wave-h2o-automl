@@ -672,14 +672,11 @@ async def show_lb(q: Q):
             ui.text_m(f'**Select a model to download the MOJO**'),
             lb_table
         ])
-
-
     else:
         q.page['main'] = ui.form_card(box='body_main', items=[
-            ui.text_xl('AutoML Leaderboard'),
-            ui.text('No models trained. Please train a model first.'),
-            ui.buttons([ui.button(name='train', label='Train a model', primary=True)])
-        ])
+            ui.text('No models trained. Please run AutoML first using the Train tab.'),
+            ui.buttons([ui.button(name='train', label='Run AutoML', primary=True)])
+        ])  
 
 
 # Clean cards
@@ -708,46 +705,54 @@ async def aml_plots(q: Q, arg=False, warning: str = ''):
 
     await clean_cards(q)
 
-    q.page['main'] = ui.tab_card(
-        box='body_main',
-        value = 'automl_summary',
-        items=[
-            ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),  # model correlation + pareto front
-            ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"), # varimp heatmap + PD plot + picker
-        ],
-        link=True
-    )
+    if q.app.aml:
 
-    # Pareto Front Plot
-    try:
-        q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot_pareto_front'] = ui.image_card(
-            box='charts_left',
-            title="Pareto Front Plot",
-            type="png",
-            image=get_image_from_matplotlib(q.app.pf_plot),
+        q.page['main'] = ui.tab_card(
+            box='body_main',
+            value = 'automl_summary',
+            items=[
+                ui.tab(name="automl_summary", label="Models Summary",  icon="Home"),  # model correlation + pareto front
+                ui.tab(name="automl_varimp", label="Variable Explain",  icon="Database"), # varimp heatmap + PD plot + picker
+            ],
+            link=True
         )
-    except Exception as e:
-        print(f'No Pareto Front plot found: {e}')
-        q.page['plot_pareto_front'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Pareto Front plot currently unavailable')
-           ])
 
-    # Model Correlation Heatmap
-    try:
-        if q.app.mc_plot is None:
-            q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        q.page['plot21'] = ui.image_card(
-            box='charts_right',
-            title="Model Correlation Heatmap Plot",
-            type="png",
-            image=get_image_from_matplotlib(q.app.mc_plot),
-        )
-    except Exception as e:
-        print(f'No Model Correlation Heatmap found: {e}')
-        q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Model Correlation Heatmap currently unavailable')
-           ])
+        # Pareto Front Plot
+        try:
+            q.app.pf_plot = pf_plot = q.app.aml.pareto_front(test_frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
+            q.page['plot_pareto_front'] = ui.image_card(
+                box='charts_left',
+                title="Pareto Front Plot",
+                type="png",
+                image=get_image_from_matplotlib(q.app.pf_plot),
+            )
+        except Exception as e:
+            print(f'No Pareto Front plot found: {e}')
+            q.page['plot_pareto_front'] = ui.form_card(box='charts_right', items=[
+                ui.text(f'Pareto Front plot currently unavailable')
+            ])
+
+        # Model Correlation Heatmap
+        try:
+            if q.app.mc_plot is None:
+                q.app.mc_plot = q.app.aml.model_correlation_heatmap(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
+            q.page['plot21'] = ui.image_card(
+                box='charts_right',
+                title="Model Correlation Heatmap Plot",
+                type="png",
+                image=get_image_from_matplotlib(q.app.mc_plot),
+            )
+        except Exception as e:
+            print(f'No Model Correlation Heatmap found: {e}')
+            q.page['plot21'] = ui.form_card(box='charts_left', items=[
+                ui.text(f'Model Correlation Heatmap currently unavailable')
+            ])
+    else:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            #ui.text_xl('AutoML Leaderboard'),
+            ui.text('No models trained. Please run AutoML first using the Train tab.'),
+            ui.buttons([ui.button(name='train', label='Run AutoML', primary=True)])
+        ])        
 
 
 # This is currently the same code as the aml_plots above
@@ -827,39 +832,43 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
     except Exception as e:
         print(f'No variable importance heatmap found: {e}')
         q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Variable importance heatmap unavailable')
+            ui.text(f'Variable importance heatmap currently unavailable')
            ])
 
+    try:
+        # PD Picker
+        # Maybe update the 'choices' variable to be predictor_columns
+        choices = []
+        x = q.app.train_df.columns.to_list()
+        if q.app.target in x:
+            x.remove(q.app.target)
+        if x:
+            for col in x:
+                choices.append(ui.choice(col, col))
 
-    #PD Picker
-    # Maybe update the 'choices' variable to be predictor_columns
-    choices = []
-    x = q.app.train_df.columns.to_list()
-    if q.app.target in x:
-        x.remove(q.app.target)
-    if x:
-        for col in x:
-            choices.append(ui.choice(col, col))
-
-    if q.args.column_pd is None:
-        if q.app.pd_plot is None:
-            #col = q.args.column_pd[0]
-            q.page['plot31'] = ui.form_card(box='charts_right', items=[
-                ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
-                ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
-            ])
+        if q.args.column_pd is None:
+            if q.app.pd_plot is None:
+                #col = q.args.column_pd[0]
+                q.page['plot31'] = ui.form_card(box='charts_right', items=[
+                    ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").varimp()[0][0]]),
+                    ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+                ])
+            else:
+                #col = q.args.column_pd[0]
+                q.page['plot31'] = ui.form_card(box='charts_right', items=[
+                    ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.pd_col]),
+                    ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
+                ])
         else:
-            #col = q.args.column_pd[0]
             q.page['plot31'] = ui.form_card(box='charts_right', items=[
-                ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = [q.app.pd_col]),
+                ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
                 ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
             ])
-    else:
-        q.page['plot31'] = ui.form_card(box='charts_right', items=[
-            ui.picker(name='column_pd', label='Select Column', choices=choices, max_choices = 1, values = q.args.column_pd),
-            ui.buttons([ui.button(name='select_column_pd', label='Show Partial Dependence', primary=True)])
-        ])
-
+    except Exception as e:
+        print(f'Partial dependence variable selector unavailable: {e}')
+        q.page['plot31'] = ui.form_card(box='charts_left', items=[
+            ui.text(f'Partial dependence variable selector currently unavailable')
+           ])            
 
     # PD Plot
     try:
@@ -880,133 +889,117 @@ async def aml_varimp(q: Q, arg=False, warning: str = ''):
     except Exception as e:
         print(f'No Partial Dependence Multi-model Plot found: {e}')
         q.page['plot32'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Partial Dependence Multi-model Plot unavailable')
+            ui.text(f'Partial Dependence Multi-model Plot currently unavailable')
            ])
 
 
 
-@on('lb_table')# Triggered upon clicking model name in leaderboard
-@on('explain2')# Menu for importing new datasets
+@on('lb_table') # Triggered upon clicking model name in leaderboard
+@on('explain2') # Menu for importing new datasets
 async def picker_example(q: Q, arg=False, warning: str = ''):
     await clean_cards(q)
 
-    if q.args.model_picker is not None:
-        q.app.selected_model = q.args.model_picker[0]
-    else:
-        q.app.selected_model = q.app.aml.get_best_model(algorithm="basemodel").model_id
+    if q.app.aml:
 
-    model_str = q.app.selected_model
-    model = h2o.get_model(model_str)
-    mojo_path = model.download_mojo(path=f'{q.app.tmp_dir}')
+        # Variable picker
+        if q.args.model_picker is not None:
+            q.app.selected_model = q.args.model_picker[0]
+        else:
+            q.app.selected_model = q.app.aml.get_best_model(algorithm="basemodel").model_id
 
-    download_path, = await q.site.upload([mojo_path])
+        model_str = q.app.selected_model
+        model = h2o.get_model(model_str)
+        mojo_path = model.download_mojo(path=f'{q.app.tmp_dir}')
+        download_path, = await q.site.upload([mojo_path])
 
-    # TO DO: Rename 'choices' to 'models'
-    choices = []
-    models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
-    if models_list:
-        for model_id in models_list:
-            choices.append(ui.choice(model_id, model_id))
-    #print(choices)
-    if q.args.model_picker is not None:
-        q.page['main'] = ui.form_card(box='body_main', items=[
-            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
-            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
-            ui.text(f'[Download MOJO]({download_path})')
-        ])
-    else:
-        q.page['main'] = ui.form_card(box='body_main', items=[
-            ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").model_id]),
-            ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
-            ui.text(f'[Download MOJO]({download_path})')
-        ])
+        # TO DO: Rename 'choices' to 'models'
+        choices = []
+        models_list = q.app.aml.leaderboard.as_data_frame()['model_id'].to_list()
+        if models_list:
+            for model_id in models_list:
+                choices.append(ui.choice(model_id, model_id))
+        #print(choices)
+        if q.args.model_picker is not None:
+            q.page['main'] = ui.form_card(box='body_main', items=[
+                ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = q.args.model_picker),
+                ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
+                ui.text(f'[Download MOJO]({download_path})')
+            ])
+        else:
+            q.page['main'] = ui.form_card(box='body_main', items=[
+                ui.picker(name='model_picker', label='Select Model', choices=choices, max_choices = 1, values = [q.app.aml.get_best_model(algorithm="basemodel").model_id]),
+                ui.buttons([ui.button(name='select_model', label='Explain Model', primary=True)]),
+                ui.text(f'[Download MOJO]({download_path})')
+            ])
 
+        # Variable importance plot
+        try:
 
-    # Variable importance plot
-    try:
-
-        if q.app.selected_model is None:#model not selected yet
-            if q.app.varimp_plot is None:#plot not generated yet
+            if q.app.selected_model is None: # model not selected yet
+                if q.app.varimp_plot is None: # plot not generated yet
+                    q.app.varimp_plot = model.varimp_plot(server = True)
+            else: # model has been selected, so use selected model (code above for q.app.selected_model)
                 q.app.varimp_plot = model.varimp_plot(server = True)
-        else:#model has been selected, so use selected model (code above for q.app.selected_model)
-            q.app.varimp_plot = model.varimp_plot(server = True)
 
-        q.page['plot21'] = ui.image_card(
-            box='charts_left',
-            title="Variable Importance Plot",
-            type="png",
-            image=get_image_from_matplotlib(q.app.varimp_plot),
-        )
-    except Exception as e:
-        print(f'No variable importance found for {model_str}: {e}')
-        q.page['plot21'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Variable importance unavailable for **{model_str}**')
-           ])
+            q.page['plot21'] = ui.image_card(
+                box='charts_left',
+                title="Variable Importance Plot",
+                type="png",
+                image=get_image_from_matplotlib(q.app.varimp_plot),
+            )
+        except Exception as e:
+            print(f'No variable importance found for {model_str}: {e}')
+            q.page['plot21'] = ui.form_card(box='charts_left', items=[
+                ui.text(f'Variable importance plot currently unavailable for **{model_str}**')
+               ])
 
-
-    # Shapley Summary Plot
-    try:
-        if q.app.selected_model is None:
-            if q.app.shap_plot is None:
+        # Shapley Summary Plot
+        try:
+            if q.app.selected_model is None:
+                if q.app.shap_plot is None:
+                    q.app.shap_plot = model.shap_summary_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
+            else:
                 q.app.shap_plot = model.shap_summary_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
-        else:
-            q.app.shap_plot = model.shap_summary_plot(frame=q.app.test, figsize=(FIGSIZE[0], FIGSIZE[0]))
 
-        q.page['plot22'] = ui.image_card(
-            box='charts_right',
-            title="Shapley Summary Plot",
-            type="png",
-            image=get_image_from_matplotlib(q.app.shap_plot),
-        )
-    except Exception as e:
-        print(f'No shapley summary found for {model_str}: {e}')
-        q.page['plot22'] = ui.form_card(box='charts_right', items=[
-            ui.text(f'Shapley Summary unavailable for **{model_str}**')
-           ])
+            q.page['plot22'] = ui.image_card(
+                box='charts_right',
+                title="Shapley Summary Plot",
+                type="png",
+                image=get_image_from_matplotlib(q.app.shap_plot),
+            )
+        except Exception as e:
+            print(f'No Shapley Summary found for {model_str}: {e}')
+            q.page['plot22'] = ui.form_card(box='charts_right', items=[
+                ui.text(f'Shapley Summary plot currently unavailable for **{model_str}**')
+               ])
 
-    #Learning Curve Plot
-    try:
-        if q.app.selected_model is None:
-            if q.app.learning_curve_plot is None:
+        # Learning Curve Plot
+        try:
+            if q.app.selected_model is None:
+                if q.app.learning_curve_plot is None:
+                    q.app.learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
+            else:
                 q.app.learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
-        else:
-            q.app.learning_curve_plot = model.learning_curve_plot(figsize=FIGSIZE)
 
-        q.page['plot31'] = ui.image_card(
-            box='charts_left',
-            title="Learning curve Plot",
-            type="png",
-            image=get_image_from_matplotlib(q.app.learning_curve_plot),
-        )
-    except Exception as e:
-        print(f'No Learning Curve found for {model_str}: {e}')
-        q.page['plot31'] = ui.form_card(box='charts_left', items=[
-            ui.text(f'Learning Curve unavailable for **{model_str}**')
-           ])
+            q.page['plot31'] = ui.image_card(
+                box='charts_left',
+                title="Learning Curve Plot",
+                type="png",
+                image=get_image_from_matplotlib(q.app.learning_curve_plot),
+            )
+        except Exception as e:
+            print(f'No Learning Curve found for {model_str}: {e}')
+            q.page['plot31'] = ui.form_card(box='charts_left', items=[
+                ui.text(f'Learning Curve plot currently unavailable for **{model_str}**')
+               ])
 
-# async def generate_explain_automl(q: Q):
+    else:
+        q.page['main'] = ui.form_card(box='body_main', items=[
+            ui.text('No models trained. Please run AutoML first using the Train tab.'),
+            ui.buttons([ui.button(name='train', label='Run AutoML', primary=True)])
+        ])                        
 
-#     # TO DO: Figure out how to populate the group/automl level plots
-#     # - how to access the automl object from the other tab
 
-#     # Variable importance plot
-#     try:
-#         var_imp_df = model.varimp(use_pandas=True)
-#         sorted_df = var_imp_df.sort_values(by='scaled_importance', ascending=True).iloc[0:10]
-#         rows = list(zip(sorted_df['variable'], sorted_df['scaled_importance']))
-#         q.page.add('foo', ui.plot_card(
-#             box='charts_left',
-#             title='Variable Importance Plot',
-#             data=data('feature score', rows=rows),
-#             plot=ui.plot([ui.mark(type='interval', x='=score', y='=feature', x_min=0, y_min=0, x_title='Relative Importance',
-#                                   y_title='Feature', color='#33BBFF')])
-#         ))
-#     except Exception as e:
-#         model_str = "foo"
-#         print(f'No var_imp found for {model_str}: {e}')
-#         q.page['foo'] = ui.form_card(box='charts_left', items=[
-#             ui.text(f'Variable importance unavailable for **{model_str}**')
-#            ])
 
 
 @app('/')
