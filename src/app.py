@@ -561,15 +561,6 @@ async def train_model(q: Q):
         'keep_cross_validation_predictions', 'keep_cross_validation_models', \
         'keep_cross_validation_fold_assignment', 'export_checkpoints_dir']
 
-    # Create a parameter dictionary
-    def process_params(p):
-        if p is None:
-            exit
-        elif p == "AUTO":
-            exit
-        else:
-            return p
-
     # Update the x (predictor columns) argument if the user has selected columns to ignore    
     args_dict = expando_to_dict(q.args)
     automl_params_dict = {k: args_dict[k] for k in automl_param_names}
