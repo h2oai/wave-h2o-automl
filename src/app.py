@@ -517,6 +517,7 @@ async def train_model(q: Q):
     q.app.target = q.args.target
     q.app.is_classification = q.args.is_classification
 
+    # name of response column
     y = q.app.target[0]
 
     main_page = q.page['main']
@@ -529,6 +530,7 @@ async def train_model(q: Q):
         test = h2o.H2OFrame(q.app.test_df)
         # For binary classification, response should be a factor
         if q.app.is_classification:
+            print("\n is classification \n")
             train[y] = train[y].asfactor()
             test[y] = test[y].asfactor()
     else:
@@ -537,20 +539,16 @@ async def train_model(q: Q):
         # For binary classification, response should be a factor
         if q.app.is_classification:
             csv_data[y] = csv_data[y].asfactor()
-        #print(q.app.train_fraction_ratio)
-        #print("\n\n")
-        #print(q.app.train_fraction_seed)
         train, test = csv_data.split_frame(ratios = [q.app.train_fraction_ratio], seed=q.app.train_fraction_seed)
 
     # Store train and test to be used elsewhere
     q.app.train = train
-    q.app.test = test           
+    q.app.test = test
 
     # Identify predictors and response
     x = train.columns
     if y in x:
         x.remove(y)
-
 
     # Process user input (need to update this if we add more input fields in the future) 
     # also should include ignore_columns but we won't use that since it's not in the Python API
@@ -649,10 +647,10 @@ async def show_lb(q: Q):
 
         # Determine task type
         if q.app.is_classification is True:
-            if len(q.app.aml.leader.max_per_class_error()[0]) == 2:
-                q.app.task_type = 'Binary classification'
-            else:
+            if type(q.app.aml.leader.model_performance()) == h2o.model.metrics.multinomial.H2OMultinomialModelMetrics:
                 q.app.task_type = 'Multiclass classification'
+            else:
+                q.app.task_type = 'Binary classification'
         else:
             q.app.task_type = 'Regression'
 
