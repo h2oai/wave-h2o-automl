@@ -32,6 +32,6 @@ Note! If you did not activate your virtual environment this will be:
 ### 4. View the App
 Point your favorite web browser to [localhost:10101](http://localhost:10101)
 
-<img width="1025" alt="Screen Shot 2023-02-17 at 9 10 14 AM" src="https://user-images.githubusercontent.com/4073698/219718736-dd30dbc6-cbd6-46df-bf3a-af37c18297eb.png">
+<img alt="homepage" src="static/screenshot-1.png">
 
 
