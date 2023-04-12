@@ -1,6 +1,6 @@
 [App]
 Name = "ai.h2o.h2o_aml"
-Version = "0.9.1"
+Version = "1.0.0"
 Title = "H2O AutoML"
 Description = "AutoML using H2O-3"
 Category = "Data Science"
