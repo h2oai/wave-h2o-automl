@@ -4,7 +4,7 @@
 
 **Actively Being Maintained:** Yes
 
-**Last Updated:** February 21, 2023
+**Last Updated:** April 11, 2023
 
 **Comes with Demo Mode (pre-loaded data, models, results, etc.):** Yes
 
