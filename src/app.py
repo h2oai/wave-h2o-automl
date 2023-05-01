@@ -205,10 +205,11 @@ async def main_menu(q: Q):
             #ui.text(f"""
 #<center><img width="240" height=240" align="right" src="{q.client.img_source}"></center>"""),
             #ui.frame(content='<h2><center>H2O AutoML</center></h2>', height='60px'),
-            ui.text_xl('<p style="text-align: center;">H2O-3 AutoML</p>'),
-            ui.text("""
+            ui.text_xl('<p style="text-align: center;">H2O AutoML</p>'),
+            ui.text("""<br>
+            <center><img width="350" height="350" align="right" hspace="30" vspace="10" src="https://raw.githubusercontent.com/h2oai/wave-h2o-automl/main/static/icon.png"></center>
 This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
-<center><img width="400" height="400" align="right" src="https://docs.h2o.ai/h2o/latest-stable/h2o-docs/_images/h2o-automl-logo.jpg"></center>
+<br><br>
 <h3><b> Features </b></h3>
 <ul>
   <li> <b> AutoML Training</b>: Allows a user to train many models using H2O AutoML using their own train/test datasets. </li>
@@ -218,7 +219,9 @@ This Wave application demonstrates how to use H2O-3 AutoML via the Wave UI.
   <li> <b> Deployment</b>: Download any model in the MOJO model format. </li>
 </ul>
 <p>AutoML Documentation: <a href="https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html"> https://docs.h2o.ai/h2o/latest-stable/h2o-docs/automl.html </a> </p>
-
+<br>
+<h3><b> Getting Started </b></h3>
+<br>To get started, import your own data in CSV format, or use one of the pre-loaded datasets.
             """),
         ])
     await q.page.save()
